@@ -83,39 +83,66 @@ def get_tts_config() -> dict:
     """
     Return complete environment configuration for TTS (Text-to-Speech).
 
+    Supports two TTS providers:
+    1. CosyVoice (local, free, recommended)
+    2. OpenAI TTS (paid, fallback)
+
     Returns:
-        dict: Dictionary containing the following keys:
-            - model: TTS model name
-            - api_key: TTS API key
-            - base_url: TTS API endpoint URL
-            - voice: Default voice character
+        dict: Dictionary containing TTS configuration based on provider
 
     Raises:
         ValueError: If required configuration is missing
     """
-    model = _strip_value(os.getenv("TTS_MODEL"))
-    api_key = _strip_value(os.getenv("TTS_API_KEY"))
-    base_url = _strip_value(os.getenv("TTS_URL"))
-    voice = _strip_value(os.getenv("TTS_VOICE", "alloy"))
+    # Check which TTS provider to use
+    use_cosyvoice = _strip_value(os.getenv("USE_COSYVOICE", "true")).lower() == "true"
 
-    # Validate required configuration
-    if not model:
-        raise ValueError(
-            "Error: TTS_MODEL not set, please configure it in .env file (e.g., tts-1 or tts-1-hd)"
-        )
-    if not api_key:
-        raise ValueError("Error: TTS_API_KEY not set, please configure it in .env file")
-    if not base_url:
-        raise ValueError(
-            "Error: TTS_URL not set, please configure it in .env file (e.g., https://api.openai.com/v1)"
-        )
+    if use_cosyvoice:
+        # CosyVoice configuration (local TTS)
+        model_dir = _strip_value(os.getenv("COSYVOICE_MODEL_DIR"))
+        version = _strip_value(os.getenv("COSYVOICE_VERSION", "3.0"))
+        mode = _strip_value(os.getenv("COSYVOICE_MODE", "instruct"))
+        conda_env = _strip_value(os.getenv("COSYVOICE_CONDA_ENV", "DeepTutor-env-3.11"))
+        default_voice = _strip_value(os.getenv("TTS_VOICE", "中文女"))
 
-    return {
-        "model": model,
-        "api_key": api_key,
-        "base_url": base_url,
-        "voice": voice,
-    }
+        logger.info(f"Using CosyVoice TTS: v{version}, mode={mode}")
+
+        return {
+            "provider": "cosyvoice",
+            "model_dir": model_dir,
+            "version": version,
+            "mode": mode,
+            "conda_env": conda_env,
+            "voice": default_voice,
+            "model": f"Fun-CosyVoice{version.replace('.', '')}",  # For display
+        }
+    else:
+        # OpenAI TTS configuration (fallback)
+        model = _strip_value(os.getenv("TTS_MODEL"))
+        api_key = _strip_value(os.getenv("TTS_API_KEY"))
+        base_url = _strip_value(os.getenv("TTS_URL"))
+        voice = _strip_value(os.getenv("TTS_VOICE", "alloy"))
+
+        # Validate required configuration
+        if not model:
+            raise ValueError(
+                "Error: TTS_MODEL not set, please configure it in .env file (e.g., tts-1 or tts-1-hd)"
+            )
+        if not api_key:
+            raise ValueError("Error: TTS_API_KEY not set, please configure it in .env file")
+        if not base_url:
+            raise ValueError(
+                "Error: TTS_URL not set, please configure it in .env file (e.g., https://api.openai.com/v1)"
+            )
+
+        logger.info("Using OpenAI TTS (fallback)")
+
+        return {
+            "provider": "openai",
+            "model": model,
+            "api_key": api_key,
+            "base_url": base_url,
+            "voice": voice,
+        }
 
 
 def get_agent_params(module_name: str) -> dict:
