@@ -127,13 +127,14 @@ def test_batch_embedding_large():
         return False
 
 
-def test_wrapper_function():
+async def test_wrapper_function():
     """测试 Embedding 包装器函数"""
     print("\n" + "=" * 60)
     print("测试 3: Embedding 包装器函数")
     print("=" * 60)
 
     try:
+        import numpy as np
         from src.tools.zhipu_batch_embedding_wrapper import batch_embed_func
 
         # 创建 embedding 函数
@@ -148,24 +149,24 @@ def test_wrapper_function():
         print(f"\n📝 小批量测试: {len(test_texts_small)} 条文本")
 
         start_time = time.time()
-        embeddings_small = embedding_func(test_texts_small)
+        embeddings_small = await embedding_func(test_texts_small)
         elapsed_small = time.time() - start_time
 
         print(f"✅ 小批量成功！")
         print(f"   - 耗时: {elapsed_small:.2f} 秒")
-        print(f"   - 向量维度: {len(embeddings_small[0]) if embeddings_small else 0}")
+        print(f"   - 向量维度: {len(embeddings_small[0]) if embeddings_small.size > 0 else 0}")
 
         # 测试大量文本
         test_texts_large = [f"测试文本 {i}" for i in range(1, 101)]
         print(f"\n📝 大批量测试: {len(test_texts_large)} 条文本")
 
         start_time = time.time()
-        embeddings_large = embedding_func(test_texts_large)
+        embeddings_large = await embedding_func(test_texts_large)
         elapsed_large = time.time() - start_time
 
         print(f"✅ 大批量成功！")
         print(f"   - 耗时: {elapsed_large:.2f} 秒")
-        print(f"   - 向量维度: {len(embeddings_large[0]) if embeddings_large else 0}")
+        print(f"   - 向量维度: {len(embeddings_large[0]) if embeddings_large.size > 0 else 0}")
 
         return True
 
@@ -179,13 +180,14 @@ def test_wrapper_function():
         return False
 
 
-def test_realtime_only():
+async def test_realtime_only():
     """测试仅使用实时 API（不使用 Batch API）"""
     print("\n" + "=" * 60)
     print("测试 4: 实时 API 模式（Batch API 禁用）")
     print("=" * 60)
 
     try:
+        import numpy as np
         from src.tools.zhipu_batch_embedding_wrapper import batch_embed_func
 
         # 创建禁用 Batch API 的函数
@@ -199,18 +201,39 @@ def test_realtime_only():
         print("⚡ 使用实时 API 模式...")
 
         start_time = time.time()
-        embeddings = embedding_func(test_texts)
+        embeddings = await embedding_func(test_texts)
         elapsed_time = time.time() - start_time
 
         print(f"✅ 成功！")
         print(f"   - 耗时: {elapsed_time:.2f} 秒")
-        print(f"   - 向量维度: {len(embeddings[0]) if embeddings else 0}")
+        print(f"   - 向量数量: {len(embeddings)}")
+        print(f"   - 向量维度: {len(embeddings[0]) if embeddings.size > 0 else 0}")
 
         return True
 
     except Exception as e:
         print(f"❌ 失败: {e}")
+        import traceback
+        traceback.print_exc()
         return False
+
+
+async def run_tests(args):
+    """运行所有测试（异步）"""
+    results = []
+
+    # 运行测试
+    if args.all or args.test_batch:
+        results.append(("Batch Embedding 基本", test_batch_embedding_basic()))
+        results.append(("大规模 Batch Embedding", test_batch_embedding_large()))
+
+    if args.all or args.test_realtime:
+        results.append(("实时 API 模式", await test_realtime_only()))
+
+    if args.all or args.test_wrapper:
+        results.append(("包装器函数", await test_wrapper_function()))
+
+    return results
 
 
 def main():
@@ -243,18 +266,8 @@ def main():
         args.test_batch = True
         args.test_wrapper = True
 
-    results = []
-
-    # 运行测试
-    if args.all or args.test_batch:
-        results.append(("Batch Embedding 基本", test_batch_embedding_basic()))
-        results.append(("大规模 Batch Embedding", test_batch_embedding_large()))
-
-    if args.all or args.test_realtime:
-        results.append(("实时 API 模式", test_realtime_only()))
-
-    if args.all or args.test_wrapper:
-        results.append(("包装器函数", test_wrapper_function()))
+    # 运行异步测试
+    results = asyncio.run(run_tests(args))
 
     # 打印测试结果摘要
     print("\n" + "=" * 60)

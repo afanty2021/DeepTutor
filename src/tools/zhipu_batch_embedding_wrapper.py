@@ -9,7 +9,7 @@
 使用方式：
     from src.tools.zhipu_batch_embedding_wrapper import batch_embed_func
 
-    # 使用 Batch API
+    # 使用 Batch 模式
     embedding_func = batch_embed_func(
         embedding_dim=2048,
         api_key="your-api-key",
@@ -18,11 +18,14 @@
         batch_threshold=100,  # 超过 100 条文本时使用 Batch
     )
 
-    vectors = embedding_func(["文本1", "文本2", ...])
+    vectors = await embedding_func(["文本1", "文本2", ...])
 """
 
+import asyncio
 import os
 from typing import Any
+
+import numpy as np
 
 from lightrag.utils import EmbeddingFunc
 from openai import OpenAI
@@ -95,19 +98,19 @@ class BatchEmbeddingWrapper:
                 self._batch_client = False  # 标记为不可用
         return self._batch_client
 
-    def __call__(self, texts: list[str]) -> list[list[float]]:
+    async def __call__(self, texts: list[str]) -> np.ndarray:
         """
-        对文本列表进行 Embedding
+        对文本列表进行 Embedding（异步）
 
         Args:
             texts: 待 Embedding 的文本列表
 
         Returns:
-            向量列表
+            numpy 数组，形状为 (len(texts), embedding_dim)
         """
         # 空列表处理
         if not texts:
-            return []
+            return np.array([], dtype=np.float32).reshape(0, self.embedding_dim)
 
         # 决定使用哪种 API
         use_batch_api = (
@@ -117,12 +120,16 @@ class BatchEmbeddingWrapper:
         )
 
         if use_batch_api:
-            return self._embed_batch(texts)
+            return await self._embed_batch(texts)
         else:
-            return self._embed_realtime(texts)
+            return await self._embed_realtime(texts)
 
-    def _embed_realtime(self, texts: list[str]) -> list[list[float]]:
-        """使用实时 API 进行 Embedding"""
+    async def _embed_realtime(self, texts: list[str]) -> np.ndarray:
+        """使用实时 API 进行 Embedding
+
+        Returns:
+            numpy 数组，形状为 (len(texts), embedding_dim)
+        """
         embeddings = []
 
         # 智谱 API 支持批量请求（最多 64 条）
@@ -143,28 +150,41 @@ class BatchEmbeddingWrapper:
 
             except Exception as e:
                 print(f"⚠️ 实时 API Embedding 失败: {e}")
+                import traceback
+                traceback.print_exc()
                 # 返回零向量作为备用方案
                 embeddings.extend([[0.0] * self.embedding_dim] * len(batch))
 
-        return embeddings
+        # 转换为 numpy 数组（LightRAG 要求）
+        return np.array(embeddings, dtype=np.float32)
 
-    def _embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """使用 Batch API 进行 Embedding"""
+    async def _embed_batch(self, texts: list[str]) -> np.ndarray:
+        """使用 Batch API 进行 Embedding
+
+        Returns:
+            numpy 数组，形状为 (len(texts), embedding_dim)
+        """
         if self.batch_client is False:
             # Batch 客户端不可用，回退到实时 API
             print("⚠️ Batch API 不可用，使用实时 API")
-            return self._embed_realtime(texts)
+            return await self._embed_realtime(texts)
 
         try:
             print(f"📦 使用 Batch API 处理 {len(texts)} 条文本...")
-            embeddings = self.batch_client.embed_texts(
-                texts=texts,
-                model=self.model,
+            # Batch API 客户端的 embed_texts 是同步的，在线程池中运行
+            loop = asyncio.get_event_loop()
+            embeddings = await loop.run_in_executor(
+                None,
+                lambda: self.batch_client.embed_texts(
+                    texts=texts,
+                    model=self.model,
+                )
             )
-            return embeddings
+            # 转换为 numpy 数组（LightRAG 要求）
+            return np.array(embeddings, dtype=np.float32)
         except Exception as e:
             print(f"⚠️ Batch API 失败: {e}，回退到实时 API")
-            return self._embed_realtime(texts)
+            return await self._embed_realtime(texts)
 
 
 def batch_embed_func(
@@ -201,7 +221,7 @@ def batch_embed_func(
         ...     batch_threshold=100,
         ... )
         >>>
-        >>> vectors = embedding_func(["文本1", "文本2"])
+        >>> vectors = await embedding_func(["文本1", "文本2"])
     """
     # 从环境变量读取配置（如果未提供）
     if api_key is None or base_url is None or model is None:
