@@ -20,17 +20,37 @@ import sys
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
-# Add raganything module path
-raganything_path = project_root.parent / "raganything" / "RAG-Anything"
-if raganything_path.exists():
-    sys.path.insert(0, str(raganything_path))
-
 from dotenv import load_dotenv
 from lightrag.llm.openai import openai_complete_if_cache, openai_embed
 from lightrag.utils import EmbeddingFunc
-from raganything import RAGAnything, RAGAnythingConfig
 
-from src.core.core import get_embedding_config, get_llm_config
+# Import Batch embedding support
+try:
+    from src.tools.zhipu_batch_embedding_wrapper import create_embedding_func_from_config
+    BATCH_EMBEDDING_AVAILABLE = True
+except ImportError:
+    BATCH_EMBEDDING_AVAILABLE = False
+
+# Import raganything (optional dependency for multi-modal RAG)
+# Priority 1: Try direct import (installed via pip)
+try:
+    from raganything import RAGAnything, RAGAnythingConfig
+except ImportError:
+    # Priority 2: Try local source path
+    raganything_path = project_root.parent / "rag-anything"
+    if raganything_path.exists():
+        sys.path.insert(0, str(raganything_path))
+        try:
+            from raganything import RAGAnything, RAGAnythingConfig
+        except ImportError:
+            RAGAnything = None
+            RAGAnythingConfig = None
+    else:
+        # raganything is optional - will be handled at runtime
+        RAGAnything = None
+        RAGAnythingConfig = None
+
+from src.core.core import get_embedding_config, get_llm_config, get_vision_config
 
 load_dotenv(dotenv_path=".env", override=False)
 
@@ -68,6 +88,7 @@ class KnowledgeBaseInitializer:
         self.api_key = api_key
         self.base_url = base_url
         self.embedding_cfg = get_embedding_config()
+        self.vision_cfg = get_vision_config()  # 获取视觉模型配置
         self.progress_tracker = progress_tracker or ProgressTracker(kb_name, self.base_dir)
 
     def _register_to_config(self):
@@ -187,12 +208,27 @@ class KnowledgeBaseInitializer:
             total=len(doc_files),
         )
 
+        # Check if RAGAnything is available
+        if RAGAnything is None or RAGAnythingConfig is None:
+            error_msg = (
+                "RAGAnything is not installed. Document processing requires RAGAnything.\n"
+                "Please install it from: https://github.com/HKUDS/RAG-Anything\n"
+                "Or use --skip-processing to skip document processing."
+            )
+            logger.error(error_msg)
+            self.progress_tracker.update(
+                ProgressStage.ERROR,
+                "RAGAnything not installed",
+                error="RAGAnything dependency not found",
+            )
+            raise RuntimeError(error_msg)
+
         # Create RAGAnything configuration
         config = RAGAnythingConfig(
             working_dir=str(self.rag_storage_dir),
-            enable_image_processing=True,
-            enable_table_processing=True,
-            enable_equation_processing=True,
+            enable_image_processing=True,  # 启用图片处理（使用 GLM-4.5V）
+            enable_table_processing=True,  # 启用表格处理
+            enable_equation_processing=True,  # 启用公式处理
         )
 
         # Get LLM configuration from env_config
@@ -220,6 +256,20 @@ class KnowledgeBaseInitializer:
             messages=None,
             **kwargs,
         ):
+            # Determine which model to use: vision model for images, default LLM for text
+            use_vision_model = image_data is not None and self.vision_cfg
+
+            if use_vision_model:
+                # Use vision model (GLM-4.5V) for image processing
+                model_to_use = self.vision_cfg["model"]
+                api_key_to_use = self.vision_cfg["api_key"]
+                base_url_to_use = self.vision_cfg["base_url"]
+            else:
+                # Use default LLM model (GLM-4.7) for text processing
+                model_to_use = llm_model
+                api_key_to_use = self.api_key
+                base_url_to_use = self.base_url
+
             # If messages format is provided, use it directly
             if messages:
                 # Remove 'messages' and other message-related params from kwargs to avoid duplicate parameter
@@ -229,13 +279,13 @@ class KnowledgeBaseInitializer:
                     if k not in ["messages", "prompt", "system_prompt", "history_messages"]
                 }
                 return openai_complete_if_cache(
-                    llm_model,
+                    model_to_use,
                     prompt="",  # Empty prompt when using messages
                     system_prompt=None,
                     history_messages=[],
                     messages=messages,
-                    api_key=self.api_key,
-                    base_url=self.base_url,
+                    api_key=api_key_to_use,
+                    base_url=base_url_to_use,
                     **clean_kwargs,
                 )
             # Traditional single image format
@@ -247,7 +297,7 @@ class KnowledgeBaseInitializer:
                     if k not in ["messages", "prompt", "system_prompt", "history_messages"]
                 }
                 return openai_complete_if_cache(
-                    llm_model,
+                    model_to_use,
                     prompt="",  # Empty prompt when using messages
                     system_prompt=None,
                     history_messages=[],
@@ -270,8 +320,8 @@ class KnowledgeBaseInitializer:
                             else {"role": "user", "content": prompt}
                         ),
                     ],
-                    api_key=self.api_key,
-                    base_url=self.base_url,
+                    api_key=api_key_to_use,
+                    base_url=base_url_to_use,
                     **clean_kwargs,
                 )
             # Pure text format
@@ -281,24 +331,54 @@ class KnowledgeBaseInitializer:
         embedding_cfg = self.embedding_cfg
         embedding_api_key = embedding_cfg["api_key"] or self.api_key
         embedding_base_url = embedding_cfg["base_url"] or self.base_url
-        embedding_func = EmbeddingFunc(
-            embedding_dim=embedding_cfg["dim"],
-            max_token_size=embedding_cfg["max_tokens"],
-            func=lambda texts: openai_embed(
-                texts,
-                model=embedding_cfg["model"],
-                api_key=embedding_api_key,
-                base_url=embedding_base_url,
-            ),
-        )
 
-        # Initialize RAGAnything with log forwarding
+        # Check if Batch API should be used
+        use_batch_api = (
+            BATCH_EMBEDDING_AVAILABLE
+            and os.getenv("USE_ZHIPU_BATCH_API", "true").lower() == "true"
+        )
+        batch_threshold = int(os.getenv("BATCH_API_THRESHOLD", "100"))
+
+        if use_batch_api:
+            # Use Batch API for better performance and cost savings
+            logger.info(
+                f"🚀 使用智谱 Batch API (阈值: {batch_threshold} 条文本)\n"
+                f"   - 无并发限制\n"
+                f"   - 50% 成本节省\n"
+                f"   - 适合大规模数据处理"
+            )
+            embedding_func = create_embedding_func_from_config(
+                config=embedding_cfg,
+                use_batch=True,
+                batch_threshold=batch_threshold,
+            )
+        else:
+            # Use real-time API (original method)
+            logger.info("⚡ 使用实时 API 模式")
+            embedding_func = EmbeddingFunc(
+                embedding_dim=embedding_cfg["dim"],
+                max_token_size=embedding_cfg["max_tokens"],
+                func=lambda texts: openai_embed.func(
+                    texts,
+                    model=embedding_cfg["model"],
+                    api_key=embedding_api_key,
+                    base_url=embedding_base_url,
+                    embedding_dim=embedding_cfg["dim"],  # 传递维度参数
+                ),
+            )
+
+        # Initialize RAGAnything with optimized concurrency for 智谱 Embedding-3
+        # 智谱 Embedding-3 supports up to 50 concurrent requests
+        # Using max_parallel_insert=50 to maximize throughput
         with LightRAGLogContext(scene="knowledge_init"):
             rag = RAGAnything(
                 config=config,
                 llm_model_func=llm_model_func,
                 vision_model_func=vision_model_func,
                 embedding_func=embedding_func,
+                lightrag_kwargs={
+                    "max_parallel_insert": 50,  # 智谱 Embedding-3 supports 50 concurrent requests
+                },
             )
 
         # Ensure LightRAG is initialized
