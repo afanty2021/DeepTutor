@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 """
-NarratorAgent - Note Narration Agent (CosyVoice Support)
+NarratorAgent - Note Narration Agent (CosyVoice + OpenAI Support)
 
 Converts note content into narration scripts and generates TTS audio using:
 - CosyVoice (local, free) - Recommended
 - OpenAI TTS (paid, fallback)
+
+Uses unified PromptManager for prompt loading.
 """
 
 from datetime import datetime
@@ -17,7 +19,7 @@ from typing import Any, Optional
 from urllib.parse import urlparse
 import uuid
 
-import yaml
+from openai import OpenAI as OpenAIClient
 
 # Add project root for imports
 _project_root = Path(__file__).parent.parent.parent.parent
@@ -28,6 +30,7 @@ from lightrag.llm.openai import openai_complete_if_cache
 
 from src.core.core import get_agent_params, get_llm_config, get_tts_config, load_config_with_main
 from src.core.logging import get_logger
+from src.core.prompt_manager import get_prompt_manager
 
 # Import shared stats from edit_agent
 try:
@@ -44,29 +47,6 @@ try:
 except ImportError:
     COSYVOICE_AVAILABLE = False
     CosyVoiceTTS = None
-
-# Import OpenAI for fallback
-try:
-    from openai import OpenAI as OpenAIClient
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    OpenAIClient = None
-
-
-def _load_prompts(language: str = "en") -> dict:
-    """Load prompts from YAML file based on language"""
-    prompts_dir = Path(__file__).parent / "prompts" / language
-    prompt_file = prompts_dir / "narrator_agent.yaml"
-    if prompt_file.exists():
-        with open(prompt_file, encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    # Fallback to English if language file not found
-    fallback_file = Path(__file__).parent / "prompts" / "en" / "narrator_agent.yaml"
-    if fallback_file.exists():
-        with open(fallback_file, encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    return {}
 
 
 # Initialize logger with config
@@ -102,7 +82,13 @@ class NarratorAgent:
 
     def __init__(self, language: str = "en", use_cosyvoice: bool = None):
         self.language = language
-        self._prompts = _load_prompts(language)
+
+        # Load prompts using unified PromptManager
+        self._prompts = get_prompt_manager().load_prompts(
+            module_name="co_writer",
+            agent_name="narrator_agent",
+            language=language,
+        )
 
         # Load agent parameters
         try:
