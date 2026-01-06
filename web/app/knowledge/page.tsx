@@ -17,6 +17,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { apiUrl, wsUrl } from "@/lib/api";
+import { useGlobal } from "@/context/GlobalContext";
+import { getTranslation } from "@/lib/i18n";
 
 interface KnowledgeBase {
   name: string;
@@ -45,6 +47,8 @@ interface ProgressInfo {
 }
 
 export default function KnowledgePage() {
+  const { uiSettings } = useGlobal();
+  const t = (key: string) => getTranslation(uiSettings.language, key);
   const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -185,7 +189,9 @@ export default function KnowledgePage() {
       setError(null); // Clear previous error - empty list is not an error, it's just empty state
     } catch (err: any) {
       console.error("❌ Error fetching knowledge bases:", err);
-      console.error("❌ Error stack:", err.stack);
+      if (err.stack) {
+        console.error("❌ Error stack:", err.stack);
+      }
 
       let errorMessage =
         err.message ||
@@ -575,10 +581,10 @@ export default function KnowledgePage() {
         <div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-3">
             <BookOpen className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-            Knowledge Bases
+            {t("Knowledge Bases")}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2">
-            Manage and explore your educational content repositories.
+            {t("Knowledge Bases Description")}
           </p>
         </div>
         <div className="flex gap-3">
@@ -588,10 +594,10 @@ export default function KnowledgePage() {
               await fetchKnowledgeBases();
             }}
             className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-2 border border-slate-200 dark:border-slate-600 shadow-sm hover:shadow"
-            title="Refresh knowledge bases"
+            title={t("Refresh")}
           >
             <RefreshCw className="w-4 h-4" />
-            Refresh
+            {t("Refresh")}
           </button>
           <button
             onClick={() => {
@@ -602,7 +608,7 @@ export default function KnowledgePage() {
             className="bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors flex items-center gap-2 shadow-lg shadow-slate-900/20"
           >
             <Plus className="w-4 h-4" />
-            New Knowledge Base
+            {t("New Knowledge Base")}
           </button>
         </div>
       </div>
@@ -647,7 +653,7 @@ export default function KnowledgePage() {
                     </h3>
                     {kb.is_default && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-[10px] font-bold uppercase tracking-wide border border-blue-100 dark:border-blue-800 mt-1">
-                        Default
+                        {t("Default")}
                       </span>
                     )}
                   </div>
@@ -660,14 +666,14 @@ export default function KnowledgePage() {
                       setUploadModalOpen(true);
                     }}
                     className="p-2 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                    title="Upload Documents"
+                    title={t("Upload Documents")}
                   >
                     <Upload className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => handleDelete(kb.name)}
                     className="p-2 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                    title="Delete Knowledge Base"
+                    title={t("Delete Knowledge Base")}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -679,7 +685,7 @@ export default function KnowledgePage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg">
                     <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1 flex items-center gap-1.5">
-                      <FileText className="w-3 h-3" /> Documents
+                      <FileText className="w-3 h-3" /> {t("Documents")}
                     </p>
                     <p className="text-lg font-bold text-slate-700 dark:text-slate-200">
                       {kb.statistics.raw_documents}
@@ -687,7 +693,7 @@ export default function KnowledgePage() {
                   </div>
                   <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg">
                     <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1 flex items-center gap-1.5">
-                      <ImageIcon className="w-3 h-3" /> Images
+                      <ImageIcon className="w-3 h-3" /> {t("Images")}
                     </p>
                     <p className="text-lg font-bold text-slate-700 dark:text-slate-200">
                       {kb.statistics.images}
@@ -698,7 +704,7 @@ export default function KnowledgePage() {
                 <div className="pt-2">
                   <div className="flex items-center justify-between text-xs mb-2">
                     <span className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1.5">
-                      <Layers className="w-3 h-3" /> Status
+                      <Layers className="w-3 h-3" /> {t("Status")}
                     </span>
                     {(() => {
                       const progress = progressMap[kb.name];
@@ -706,22 +712,22 @@ export default function KnowledgePage() {
                         if (progress.stage === "completed") {
                           return (
                             <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                              Ready
+                              {t("Ready")}
                             </span>
                           );
                         } else if (progress.stage === "error") {
                           return (
                             <span className="text-red-600 dark:text-red-400 font-bold">
-                              Error
+                              {t("Error")}
                             </span>
                           );
                         } else {
                           // Display current stage and progress
                           const stageLabels: Record<string, string> = {
-                            initializing: "Initializing",
-                            processing_documents: "Processing",
-                            processing_file: "Processing File",
-                            extracting_items: "Extracting Items",
+                            initializing: t("Initializing"),
+                            processing_documents: t("Processing"),
+                            processing_file: t("Processing File"),
+                            extracting_items: t("Extracting Items"),
                           };
                           const stageLabel =
                             stageLabels[progress.stage] || progress.stage;
@@ -742,8 +748,8 @@ export default function KnowledgePage() {
                           }
                         >
                           {kb.statistics.rag_initialized
-                            ? "Ready"
-                            : "Not Indexed"}
+                            ? t("Ready")
+                            : t("Not Indexed")}
                         </span>
                       );
                     })()}
@@ -806,12 +812,12 @@ export default function KnowledgePage() {
                           )}
                           {progress.current > 0 && progress.total > 0 && (
                             <div className="text-[10px] text-slate-400 dark:text-slate-500">
-                              File {progress.current} of {progress.total}
+                              {t("File")} {progress.current} {t("of")} {progress.total}
                             </div>
                           )}
                           {progress.error && (
                             <div className="text-[10px] text-red-600 dark:text-red-400 mt-1">
-                              Error: {progress.error}
+                              {t("Error")}: {progress.error}
                             </div>
                           )}
                         </div>
@@ -837,7 +843,7 @@ export default function KnowledgePage() {
           {kbs.length === 0 && (
             <div className="col-span-full text-center py-12 text-slate-400 dark:text-slate-500">
               <Database className="w-12 h-12 mx-auto mb-4 opacity-20" />
-              <p>No knowledge bases found. Create one to get started.</p>
+              <p>{t("No knowledge bases found")}</p>
             </div>
           )}
         </div>
@@ -849,7 +855,7 @@ export default function KnowledgePage() {
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                Create Knowledge Base
+                {t("Create Knowledge Base")}
               </h3>
               <button
                 onClick={() => setCreateModalOpen(false)}
@@ -862,21 +868,21 @@ export default function KnowledgePage() {
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Knowledge Base Name
+                  {t("Knowledge Base Name")}
                 </label>
                 <input
                   type="text"
                   required
                   value={newKbName}
                   onChange={(e) => setNewKbName(e.target.value)}
-                  placeholder="e.g., Math101"
+                  placeholder={t("Knowledge Base Name")}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Upload Documents
+                  {t("Upload Documents")}
                 </label>
                 <div
                   className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
@@ -906,11 +912,11 @@ export default function KnowledgePage() {
                     />
                     <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
                       {files && files.length > 0
-                        ? `${files.length} files selected`
-                        : "Drag & drop files here or click to browse"}
+                        ? `${files.length} ${t("files selected")}`
+                        : t("Drag & drop files here")}
                     </span>
                     <span className="text-xs text-slate-400 dark:text-slate-500">
-                      Supports PDF, TXT, MD
+                      {t("Supports PDF, TXT, MD")}
                     </span>
                   </label>
                 </div>
@@ -922,7 +928,7 @@ export default function KnowledgePage() {
                   onClick={() => setCreateModalOpen(false)}
                   className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-700"
                 >
-                  Cancel
+                  {t("Cancel")}
                 </button>
                 <button
                   type="submit"
@@ -934,7 +940,7 @@ export default function KnowledgePage() {
                   {uploading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    "Create & Initialize"
+                    t("Create & Initialize")
                   )}
                 </button>
               </div>
@@ -949,7 +955,7 @@ export default function KnowledgePage() {
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                Upload Documents
+                {t("Upload Documents")}
               </h3>
               <button
                 onClick={() => setUploadModalOpen(false)}
@@ -983,8 +989,8 @@ export default function KnowledgePage() {
                   <Upload className="w-8 h-8 text-slate-400 dark:text-slate-500" />
                   <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
                     {files && files.length > 0
-                      ? `${files.length} files selected`
-                      : "Click to browse files"}
+                      ? `${files.length} ${t("files selected")}`
+                      : t("Click to browse files")}
                   </span>
                 </label>
               </div>
@@ -995,7 +1001,7 @@ export default function KnowledgePage() {
                   onClick={() => setUploadModalOpen(false)}
                   className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-700"
                 >
-                  Cancel
+                  {t("Cancel")}
                 </button>
                 <button
                   type="submit"
@@ -1005,7 +1011,7 @@ export default function KnowledgePage() {
                   {uploading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    "Upload"
+                    t("Upload")
                   )}
                 </button>
               </div>

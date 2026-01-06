@@ -34,6 +34,8 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { apiUrl } from "@/lib/api";
 import { processLatexContent } from "@/lib/latex";
+import { useGlobal } from "@/context/GlobalContext";
+import { getTranslation } from "@/lib/i18n";
 
 interface NotebookRecord {
   id: string;
@@ -127,6 +129,8 @@ const getRecordColor = (type: string) => {
 };
 
 export default function NotebookPage() {
+  const { uiSettings } = useGlobal();
+  const t = (key: string) => getTranslation(uiSettings.language, key);
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
   const [selectedNotebook, setSelectedNotebook] = useState<Notebook | null>(
     null,
@@ -472,7 +476,7 @@ export default function NotebookPage() {
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              Notebooks
+              {t("Notebooks")}
             </h1>
             <div className="flex items-center gap-2">
               <button
@@ -496,7 +500,7 @@ export default function NotebookPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
             <input
               type="text"
-              placeholder="Search notebooks..."
+              placeholder={t("Search notebooks...")}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
@@ -514,10 +518,10 @@ export default function NotebookPage() {
             <div className="p-8 text-center">
               <FolderOpen className="w-12 h-12 text-slate-200 dark:text-slate-600 mx-auto mb-3" />
               <p className="text-slate-500 dark:text-slate-400 text-sm">
-                No notebooks yet
+                {t("No notebooks found")}
               </p>
               <p className="text-slate-400 dark:text-slate-500 text-xs mt-1">
-                Create your first notebook to get started
+                {t("Create your first notebook")}
               </p>
             </div>
           ) : (
@@ -582,7 +586,7 @@ export default function NotebookPage() {
                       <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-400 dark:text-slate-500">
                         <span className="flex items-center gap-1">
                           <FileText className="w-3 h-3" />
-                          {nb.record_count} records
+                          {nb.record_count} {t("records")}
                         </span>
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
@@ -672,10 +676,10 @@ export default function NotebookPage() {
                 <div className="p-8 text-center">
                   <FileText className="w-12 h-12 text-slate-200 dark:text-slate-600 mx-auto mb-3" />
                   <p className="text-slate-500 dark:text-slate-400 text-sm">
-                    No records yet
+                    {t("No records yet")}
                   </p>
                   <p className="text-slate-400 dark:text-slate-500 text-xs mt-1">
-                    Add records from Solver, Question, Research, or Co-Writer
+                    {t("Create your first notebook")}
                   </p>
                 </div>
               ) : (
@@ -744,7 +748,7 @@ export default function NotebookPage() {
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-8">
             <BookOpen className="w-16 h-16 text-slate-200 dark:text-slate-600 mb-4" />
             <p className="text-slate-500 dark:text-slate-400">
-              Select a notebook to view records
+              {t("Select a notebook")}
             </p>
           </div>
         )}
@@ -834,10 +838,10 @@ export default function NotebookPage() {
                 <button
                   onClick={openImportModal}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 rounded-lg transition-colors"
-                  title="Import records from other notebooks"
+                  title={t("Import Records")}
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  Import
+                  {t("Import")}
                 </button>
               </div>
             )}
@@ -896,7 +900,7 @@ export default function NotebookPage() {
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-8">
             <FileText className="w-16 h-16 text-slate-200 dark:text-slate-600 mb-4" />
             <p className="text-slate-500 dark:text-slate-400">
-              Select a record to view details
+              {t("Select records")}
             </p>
           </div>
         )}
@@ -917,7 +921,7 @@ export default function NotebookPage() {
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-[400px] animate-in zoom-in-95">
             <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
               <h3 className="font-bold text-slate-900 dark:text-slate-100">
-                Create New Notebook
+                {t("New Notebook")}
               </h3>
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -929,7 +933,7 @@ export default function NotebookPage() {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                  Name
+                  {t("Notebook Name")}
                 </label>
                 <input
                   type="text"
@@ -940,13 +944,13 @@ export default function NotebookPage() {
                       name: e.target.value,
                     }))
                   }
-                  placeholder="My Notebook"
+                  placeholder={t("Enter notebook name")}
                   className="w-full px-4 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
                 />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                  Description (Optional)
+                  {t("Description")}
                 </label>
                 <textarea
                   value={newNotebook.description}
@@ -956,14 +960,14 @@ export default function NotebookPage() {
                       description: e.target.value,
                     }))
                   }
-                  placeholder="Notes about machine learning..."
+                  placeholder={t("Enter description")}
                   rows={3}
                   className="w-full px-4 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none resize-none"
                 />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                  Color
+                  {t("Color")}
                 </label>
                 <div className="flex gap-2 flex-wrap">
                   {COLORS.map((color) => (
@@ -988,7 +992,7 @@ export default function NotebookPage() {
                 onClick={() => setShowCreateModal(false)}
                 className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
               >
-                Cancel
+                {t("Cancel")}
               </button>
               <button
                 onClick={handleCreateNotebook}
@@ -996,7 +1000,7 @@ export default function NotebookPage() {
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
-                Create
+                {t("Create")}
               </button>
             </div>
           </div>
@@ -1009,7 +1013,7 @@ export default function NotebookPage() {
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-[400px] animate-in zoom-in-95">
             <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
               <h3 className="font-bold text-slate-900 dark:text-slate-100">
-                Edit Notebook
+                {t("Edit Notebook")}
               </h3>
               <button
                 onClick={() => {
@@ -1024,7 +1028,7 @@ export default function NotebookPage() {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                  Name
+                  {t("Notebook Name")}
                 </label>
                 <input
                   type="text"
@@ -1039,7 +1043,7 @@ export default function NotebookPage() {
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                  Description
+                  {t("Description")}
                 </label>
                 <textarea
                   value={editingNotebook.description}
@@ -1054,7 +1058,7 @@ export default function NotebookPage() {
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                  Color
+                  {t("Color")}
                 </label>
                 <div className="flex gap-2 flex-wrap">
                   {COLORS.map((color) => (
@@ -1084,7 +1088,7 @@ export default function NotebookPage() {
                 }}
                 className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
               >
-                Cancel
+                {t("Cancel")}
               </button>
               <button
                 onClick={handleUpdateNotebook}
@@ -1092,7 +1096,7 @@ export default function NotebookPage() {
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 <Check className="w-4 h-4" />
-                Save Changes
+                {t("Save")}
               </button>
             </div>
           </div>
@@ -1108,11 +1112,10 @@ export default function NotebookPage() {
                 <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />
               </div>
               <h3 className="font-bold text-slate-900 dark:text-slate-100 mb-2">
-                Delete Notebook?
+                {t("Delete Notebook")}
               </h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                This action cannot be undone. All records in this notebook will
-                be permanently deleted.
+                {t("Delete confirmation")}
               </p>
             </div>
             <div className="p-4 border-t border-slate-100 dark:border-slate-700 flex justify-center gap-2">
@@ -1120,14 +1123,14 @@ export default function NotebookPage() {
                 onClick={() => setShowDeleteConfirm(null)}
                 className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
               >
-                Cancel
+                {t("Cancel")}
               </button>
               <button
                 onClick={() => handleDeleteNotebook(showDeleteConfirm)}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
               >
                 <Trash2 className="w-4 h-4" />
-                Delete
+                {t("Delete")}
               </button>
             </div>
           </div>
@@ -1141,7 +1144,7 @@ export default function NotebookPage() {
             <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between shrink-0">
               <h3 className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <Upload className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                Import Records
+                {t("Import Records")}
               </h3>
               <button
                 onClick={() => {
@@ -1160,17 +1163,17 @@ export default function NotebookPage() {
               {/* Source Notebook Selection */}
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                  Source Notebook
+                  {t("Knowledge Bases")}
                 </label>
                 <select
                   value={importSourceNotebook}
                   onChange={(e) => loadImportSourceRecords(e.target.value)}
                   className="w-full px-4 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
                 >
-                  <option value="">Select a notebook...</option>
+                  <option value="">{t("Select a notebook")}</option>
                   {availableNotebooks.map((nb) => (
                     <option key={nb.id} value={nb.id}>
-                      {nb.name} ({nb.record_count} records)
+                      {nb.name} ({nb.record_count} {t("records")})
                     </option>
                   ))}
                 </select>
@@ -1181,7 +1184,7 @@ export default function NotebookPage() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                      Select Records ({selectedImportRecords.size} selected)
+                      {t("Select Records")} ({selectedImportRecords.size} {t("selected")})
                     </label>
                     <div className="flex gap-2">
                       <button
@@ -1192,24 +1195,24 @@ export default function NotebookPage() {
                         }
                         className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
                       >
-                        Select All
+                        {t("Select All")}
                       </button>
                       <button
                         onClick={() => setSelectedImportRecords(new Set())}
                         className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                       >
-                        Clear
+                        {t("Clear")}
                       </button>
                     </div>
                   </div>
 
                   {loadingImport ? (
                     <div className="py-8 text-center text-slate-400 dark:text-slate-500">
-                      Loading records...
+                      {t("Loading")}...
                     </div>
                   ) : importSourceRecords.length === 0 ? (
                     <div className="py-8 text-center text-slate-400 dark:text-slate-500">
-                      No records in this notebook
+                      {t("No Data")}
                     </div>
                   ) : (
                     <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -1269,7 +1272,7 @@ export default function NotebookPage() {
                 }}
                 className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
               >
-                Cancel
+                {t("Cancel")}
               </button>
               <button
                 onClick={handleImportRecords}
@@ -1277,7 +1280,7 @@ export default function NotebookPage() {
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Upload className="w-4 h-4" />
-                Import{" "}
+                {t("Import")}{" "}
                 {selectedImportRecords.size > 0 &&
                   `(${selectedImportRecords.size})`}
               </button>

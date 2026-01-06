@@ -244,6 +244,10 @@ interface GlobalContextType {
 
   // UI Settings
   uiSettings: { theme: "light" | "dark"; language: "en" | "zh" };
+  setUiSettings: React.Dispatch<React.SetStateAction<{
+    theme: "light" | "dark";
+    language: "en" | "zh";
+  }>>;
   refreshSettings: () => Promise<void>;
 }
 
@@ -1325,6 +1329,7 @@ export function GlobalProvider({ children }: { children: React.ReactNode }) {
         ideaGenState,
         setIdeaGenState,
         uiSettings,
+        setUiSettings,
         refreshSettings,
       }}
     >

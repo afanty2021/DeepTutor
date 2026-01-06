@@ -10,6 +10,7 @@
 # User data directory (migrated to data/user/)
 data/user/
 data/knowledge_bases/
+knowledge_bases/
 run_code_workspace/
 config/bench_config.yaml
 develop/

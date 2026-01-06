@@ -280,6 +280,39 @@ def get_embedding_config() -> dict:
     }
 
 
+def get_vision_config() -> dict:
+    """
+    Return configuration for vision models (for image/table/equation processing).
+
+    Returns:
+        dict: Dictionary containing the following keys:
+            - model: Vision model name (e.g., glm-4v, gpt-4o)
+            - api_key: Vision API key
+            - base_url: Vision API endpoint URL
+            - timeout: Request timeout in seconds
+
+    Note:
+        If vision model configuration is not set, falls back to the default LLM config.
+        Vision models should support image_url content type (OpenAI-compatible format).
+    """
+    model = _strip_value(os.getenv("VISION_MODEL"))
+    api_key = _strip_value(os.getenv("VISION_API_KEY"))
+    base_url = _strip_value(os.getenv("VISION_HOST"))
+    timeout = _to_int(_strip_value(os.getenv("VISION_TIMEOUT")), 120)
+
+    # If vision model config is not set, fall back to default LLM config
+    if not model or not api_key or not base_url:
+        # Return empty dict to signal fallback to default
+        return {}
+
+    return {
+        "model": model,
+        "api_key": api_key,
+        "base_url": base_url,
+        "timeout": timeout,
+    }
+
+
 # ============================================================================
 # YAML Configuration Loading (from config_loader.py)
 # ============================================================================

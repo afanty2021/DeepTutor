@@ -23,6 +23,7 @@ import "katex/dist/katex.min.css";
 import { useGlobal } from "@/context/GlobalContext";
 import { API_BASE_URL, apiUrl } from "@/lib/api";
 import { processLatexContent } from "@/lib/latex";
+import { getTranslation } from "@/lib/i18n";
 import AddToNotebookModal from "@/components/AddToNotebookModal";
 
 const resolveArtifactUrl = (url?: string | null, outputDir?: string) => {
@@ -52,7 +53,8 @@ const resolveArtifactUrl = (url?: string | null, outputDir?: string) => {
 };
 
 export default function SolverPage() {
-  const { solverState, setSolverState, startSolver } = useGlobal();
+  const { solverState, setSolverState, startSolver, uiSettings } = useGlobal();
+  const t = (key: string) => getTranslation(uiSettings.language, key);
 
   // Local state for input
   const [inputQuestion, setInputQuestion] = useState("");
@@ -173,7 +175,7 @@ export default function SolverPage() {
         <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex justify-between items-center backdrop-blur-sm shrink-0">
           <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold">
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-            Smart Solver
+            {t("Smart Solver")}
           </div>
           <div className="flex items-center gap-4">
             <select
@@ -207,12 +209,10 @@ export default function SolverPage() {
                 <Bot className="w-8 h-8" />
               </div>
               <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-                How can I help you today?
+                {t("Ask any question and get AI-powered solutions")}
               </h3>
               <p className="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
-                I can help you solve complex STEM problems using multi-step
-                reasoning. Try asking about calculus, physics, or coding
-                algorithms.
+                {t("Ask any question and get AI-powered solutions")}
               </p>
               <div className="grid grid-cols-1 gap-3 w-full text-sm">
                 {[

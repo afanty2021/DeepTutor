@@ -117,8 +117,15 @@ ENV_VAR_DEFINITIONS = {
         "sensitive": False,
     },
     # Web Search Configuration
+    "EXA_API_KEY": {
+        "description": "Exa AI API key for web search (recommended - better research quality)",
+        "category": "search",
+        "required": False,
+        "default": "",
+        "sensitive": True,
+    },
     "PERPLEXITY_API_KEY": {
-        "description": "Perplexity API key for web search functionality",
+        "description": "Perplexity API key for web search functionality (fallback option)",
         "category": "search",
         "required": False,
         "default": "",
@@ -160,7 +167,7 @@ ENV_CATEGORIES = {
     },
     "search": {
         "name": "Web Search Configuration",
-        "description": "External search API settings",
+        "description": "External search API settings. Exa AI is recommended for better research quality. If both are configured, Exa takes priority.",
         "icon": "search",
     },
     "system": {

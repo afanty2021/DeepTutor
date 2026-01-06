@@ -21,6 +21,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { useGlobal } from "@/context/GlobalContext";
+import { getTranslation } from "@/lib/i18n";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -32,6 +33,9 @@ import { QuestionDashboard } from "@/components/question";
 import { useQuestionReducer } from "@/hooks/useQuestionReducer";
 
 export default function QuestionPage() {
+  const { uiSettings } = useGlobal();
+  const t = (key: string) => getTranslation(uiSettings.language, key);
+
   const {
     questionState,
     setQuestionState,
@@ -152,7 +156,7 @@ export default function QuestionPage() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold">
               <PenTool className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-              Question Generator
+              {t("Question Generator")}
             </div>
 
             {/* Mode Switching - disabled when generating */}
@@ -177,7 +181,7 @@ export default function QuestionPage() {
                 }`}
               >
                 <BrainCircuit className="w-4 h-4" />
-                Custom
+                {t("Custom")}
               </button>
               <button
                 onClick={() =>
@@ -194,7 +198,7 @@ export default function QuestionPage() {
                 }`}
               >
                 <FileText className="w-4 h-4" />
-                Mimic Exam
+                {t("Mimic Exam")}
               </button>
             </div>
 
@@ -215,7 +219,7 @@ export default function QuestionPage() {
                 }`}
               >
                 <FileQuestion className="w-4 h-4" />
-                Questions
+                {t("Questions")}
                 {totalQuestions > 0 && (
                   <span className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 text-xs rounded-full">
                     {totalQuestions}
@@ -234,7 +238,7 @@ export default function QuestionPage() {
                 }`}
               >
                 <Activity className="w-4 h-4" />
-                Process
+                {t("Process")}
                 {questionState.step === "generating" && (
                   <Loader2 className="w-3 h-3 animate-spin text-purple-500 dark:text-purple-400" />
                 )}
@@ -271,7 +275,7 @@ export default function QuestionPage() {
                 className="text-sm flex items-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors px-3 py-1.5 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg border border-slate-200 dark:border-slate-600"
               >
                 <RefreshCw className="w-4 h-4" />
-                New
+                {t("New")}
               </button>
             )}
           </div>
@@ -306,13 +310,13 @@ export default function QuestionPage() {
                         }`}
                       >
                         {questionState.mode === "knowledge"
-                          ? "Custom Mode"
-                          : "Mimic Exam Paper Mode"}
+                          ? t("Custom Mode")
+                          : t("Mimic Exam Paper Mode")}
                       </h3>
                       <p className="text-sm text-slate-600 dark:text-slate-400">
                         {questionState.mode === "knowledge"
-                          ? "Generate questions based on knowledge base content"
-                          : "Generate similar questions based on an exam paper"}
+                          ? t("Generate questions based on knowledge base content")
+                          : t("Generate similar questions based on an exam paper")}
                       </p>
                     </div>
                   </div>
@@ -324,7 +328,7 @@ export default function QuestionPage() {
                     <div className="grid grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                          Question Count
+                          {t("Question Count")}
                         </label>
                         <div className="flex items-center gap-4">
                           <input
@@ -357,14 +361,14 @@ export default function QuestionPage() {
                           />
                         </div>
                         <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                          Use slider (1-10) or type directly (1-50)
+                          {t("Use slider (1-10) or type directly (1-50)")}
                         </p>
                       </div>
                     </div>
 
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                        Knowledge Point / Topic
+                        {t("Knowledge Point / Topic")}
                       </label>
                       <input
                         type="text"
@@ -375,7 +379,7 @@ export default function QuestionPage() {
                             topic: e.target.value,
                           }))
                         }
-                        placeholder="e.g. Gradient Descent Optimization"
+                        placeholder={t("e.g. Gradient Descent Optimization")}
                         className="w-full p-4 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/10 transition-all text-lg dark:text-slate-200 dark:placeholder:text-slate-500"
                       />
                     </div>
@@ -383,7 +387,7 @@ export default function QuestionPage() {
                     <div className="grid grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                          Difficulty
+                          {t("Difficulty")}
                         </label>
                         <div className="flex bg-slate-50 dark:bg-slate-700 p-1 rounded-xl border border-slate-200 dark:border-slate-600">
                           {["easy", "medium", "hard"].map((lvl) => (
@@ -401,7 +405,7 @@ export default function QuestionPage() {
                                   : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                               }`}
                             >
-                              {lvl}
+                              {t(lvl)}
                             </button>
                           ))}
                         </div>
@@ -409,12 +413,12 @@ export default function QuestionPage() {
 
                       <div className="space-y-2">
                         <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                          Type
+                          {t("Type")}
                         </label>
                         <div className="flex bg-slate-50 dark:bg-slate-700 p-1 rounded-xl border border-slate-200 dark:border-slate-600">
                           {[
-                            { id: "choice", label: "Multiple Choice" },
-                            { id: "written", label: "Written" },
+                            { id: "choice", label: t("Multiple Choice") },
+                            { id: "written", label: t("Written") },
                           ].map((t) => (
                             <button
                               key={t.id}
@@ -580,7 +584,7 @@ export default function QuestionPage() {
                   className="w-full py-4 bg-purple-600 text-white rounded-xl font-bold text-lg shadow-lg shadow-purple-500/30 hover:bg-purple-700 hover:shadow-purple-500/50 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   <Sparkles className="w-5 h-5" />
-                  Generate Questions
+                  {t("Generate Questions")}
                 </button>
               </div>
             </div>
@@ -594,13 +598,13 @@ export default function QuestionPage() {
                 <div className="mb-6 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                      Questions
+                      {t("Questions")}
                     </span>
                     <span className="text-sm text-slate-500 dark:text-slate-400">
-                      {totalQuestions} / {questionState.count} completed
+                      {totalQuestions} / {questionState.count} {t("completed")}
                       {extendedCount > 0 && (
                         <span className="ml-2 text-amber-600 dark:text-amber-400">
-                          ({extendedCount} extended)
+                          ({extendedCount} {t("extended")})
                         </span>
                       )}
                     </span>

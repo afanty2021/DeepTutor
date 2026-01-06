@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useGlobal } from "@/context/GlobalContext";
 import { getTranslation } from "@/lib/i18n";
+import LanguageSwitcher from "./LanguageSwitcher";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -74,15 +75,18 @@ export default function Sidebar() {
                 DeepTutor
               </h1>
             </div>
-            <a
-              href="https://github.com/HKUDS/DeepTutor"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
-              title="View DeepTutor on GitHub"
-            >
-              <Github className="w-5 h-5" />
-            </a>
+            <div className="flex items-center gap-2">
+              <LanguageSwitcher />
+              <a
+                href="https://github.com/HKUDS/DeepTutor"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
+                title="View DeepTutor on GitHub"
+              >
+                <Github className="w-5 h-5" />
+              </a>
+            </div>
           </div>
 
           <div className="text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100/50 dark:bg-slate-700/50 p-2 rounded-lg border border-slate-100 dark:border-slate-600">

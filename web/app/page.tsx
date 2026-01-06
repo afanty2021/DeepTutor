@@ -328,7 +328,7 @@ export default function DashboardPage() {
                 {/* Recent notebooks */}
                 {notebookStats.recent_notebooks.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-white/20">
-                    <div className="text-xs text-white/60 mb-2">Recent</div>
+                    <div className="text-xs text-white/60 mb-2">{t("Recent")}</div>
                     <div className="space-y-2">
                       {notebookStats.recent_notebooks.slice(0, 3).map((nb) => (
                         <Link
@@ -347,7 +347,7 @@ export default function DashboardPage() {
                               {nb.name}
                             </div>
                             <div className="text-[10px] text-white/60">
-                              {nb.record_count} records
+                              {nb.record_count} {t("records")}
                             </div>
                           </div>
                         </Link>

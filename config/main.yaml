@@ -2,7 +2,7 @@ server:
   backend_port: 8001
   frontend_port: 3782
 system:
-  language: en
+  language: zh
 paths:
   user_data_dir: ./data/user
   knowledge_bases_dir: ./data/knowledge_bases
@@ -16,7 +16,7 @@ paths:
 tools:
   rag_tool:
     kb_base_dir: ./data/knowledge_bases
-    default_kb: ai_textbook
+    default_kb: my_kb
   run_code:
     workspace: ./data/user/run_code_workspace
     allowed_roots:
