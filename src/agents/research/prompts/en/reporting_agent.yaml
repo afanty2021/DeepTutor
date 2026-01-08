@@ -248,6 +248,12 @@ process:
              B --> C[Output]
          ```
 
+    **IMPORTANT Chart Usage Restrictions**:
+       - ⚠️ **DO NOT USE** `xychart-beta`, `pie`, `gantt`, `gitGraph`, `erDiagram`, `journey`, `mindmap`, `timeline`, `sankey`, `block`, or other experimental/complex chart types
+       - ✅ **ONLY RECOMMENDED**: `graph` (flowcharts), `sequenceDiagram` (sequence diagrams)
+       - Reason: These chart types have compatibility issues across different Mermaid versions and often cause rendering failures
+       - If you need to display data, use Markdown tables instead
+
     4. **Code Blocks**:
        - Applicable: algorithm implementations, configuration examples, API calls
        - Must specify language type (python/javascript/sql, etc.)

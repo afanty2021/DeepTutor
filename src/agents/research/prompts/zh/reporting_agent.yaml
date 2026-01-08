@@ -248,6 +248,12 @@ process:
              B --> C[输出]
          ```
 
+    **重要图表使用限制**：
+       - ⚠️ **禁止使用** `xychart-beta`、`pie`、`gantt`、`gitGraph`、`erDiagram`、`journey`、`mindmap`、`timeline`、`sankey`、`block` 等实验性或复杂图表类型
+       - ✅ **仅推荐使用**：`graph`（流程图）、`sequenceDiagram`（时序图）
+       - 原因：这些图表类型在不同版本的 Mermaid 中存在兼容性问题，容易导致渲染失败
+       - 如果需要展示数据，请使用 Markdown 表格代替
+
     4. **代码块**：
        - 适用：算法实现、配置示例、API调用
        - 必须标注语言类型（python/javascript/sql等）
