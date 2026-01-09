@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """
 Incrementally add documents to existing knowledge base
 
@@ -18,35 +19,22 @@ import sys
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
+# Add raganything module path
+raganything_path = project_root.parent / "raganything" / "RAG-Anything"
+if raganything_path.exists():
+    sys.path.insert(0, str(raganything_path))
+
 from dotenv import load_dotenv
-from lightrag.llm.openai import openai_complete_if_cache, openai_embed
+from lightrag.llm.openai import openai_complete_if_cache
 from lightrag.utils import EmbeddingFunc
+from raganything import RAGAnything, RAGAnythingConfig
 
-# Import raganything (optional dependency for multi-modal RAG)
-# Priority 1: Try direct import (installed via pip)
-try:
-    from raganything import RAGAnything, RAGAnythingConfig
-except ImportError:
-    # Priority 2: Try local source path
-    raganything_path = project_root.parent / "rag-anything"
-    if raganything_path.exists():
-        sys.path.insert(0, str(raganything_path))
-        try:
-            from raganything import RAGAnything, RAGAnythingConfig
-        except ImportError:
-            RAGAnything = None
-            RAGAnythingConfig = None
-    else:
-        # raganything is optional - will be handled at runtime
-        RAGAnything = None
-        RAGAnythingConfig = None
-
-from src.core.core import get_embedding_config, get_llm_config, get_vision_config
+from src.services.embedding import get_embedding_client, get_embedding_config
+from src.services.llm import get_llm_config
 
 load_dotenv(dotenv_path=".env", override=False)
 
-# Use unified logging system
-from src.core.logging import LightRAGLogContext, get_logger
+from src.logging import LightRAGLogContext, get_logger
 
 logger = get_logger("KnowledgeInit")
 
@@ -88,7 +76,7 @@ class DocumentAdder:
         self.api_key = api_key
         self.base_url = base_url
         self.embedding_cfg = get_embedding_config()
-        self.vision_cfg = get_vision_config()  # 获取视觉模型配置
+        self.llm_cfg = get_llm_config()
         self.progress_tracker = progress_tracker
 
     def get_existing_files(self) -> set:
@@ -120,21 +108,20 @@ class DocumentAdder:
         for source in source_files:
             source_path = Path(source)
             if not source_path.exists():
-                logger.warning(f"  ✗ Source file does not exist: {source}")
+                logger.warning(f"  ⚠ Source file does not exist: {source}")
                 continue
 
             # Check if already exists
             if source_path.name in existing_files:
                 if skip_duplicates:
-                    logger.info(f"  ⊗ Skipped (already exists): {source_path.name}")
+                    logger.info(f"  → Skipped (already exists): {source_path.name}")
                     skipped_files.append(source_path.name)
                     continue
                 logger.warning(f"  ⚠ Overwriting existing file: {source_path.name}")
 
-            # Copy to raw directory (or use directly if already in place)
+            # Copy to raw directory
             dest_path = self.raw_dir / source_path.name
-            if source_path.resolve() != dest_path.resolve():
-                shutil.copy2(source_path, dest_path)
+            shutil.copy2(source_path, dest_path)
             new_files.append(dest_path)
             logger.info(f"  ✓ Added: {source_path.name}")
 
@@ -145,52 +132,44 @@ class DocumentAdder:
         return new_files
 
     async def process_new_documents(self, new_files: list[Path]):
-        """
-        Process newly added documents
-
-        Only process specified new files, insert content into existing knowledge graph
-        """
+        """Process newly added documents. Re-reads config to catch .env changes."""
         if not new_files:
             logger.warning("No new files to process")
             return None
 
         logger.info(f"\nProcessing {len(new_files)} new documents...")
 
-        # Check if RAGAnything is available
-        if RAGAnything is None or RAGAnythingConfig is None:
-            error_msg = (
-                "RAGAnything is not installed. Document processing requires RAGAnything.\n"
-                "Please install it from: https://github.com/HKUDS/RAG-Anything"
-            )
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
+        self.embedding_cfg = get_embedding_config()
+        self.llm_cfg = get_llm_config()
 
-        # Create RAGAnything configuration
-        config = RAGAnythingConfig(
-            working_dir=str(self.rag_storage_dir),
-            enable_image_processing=True,  # 启用图片处理（使用 GLM-4.5V）
-            enable_table_processing=True,  # 启用表格处理
-            enable_equation_processing=True,  # 启用公式处理
-            max_concurrent_files=1,  # 🔧 降低并发到1以避免 API 限流和资源争用（稳定但较慢）
+        logger.info(
+            f"Using: {self.embedding_cfg.model} "
+            f"({self.embedding_cfg.dim}D, {self.embedding_cfg.binding})"
         )
 
-        # Get model configuration
-        llm_cfg = get_llm_config()
-        model = llm_cfg["model"]
+        config = RAGAnythingConfig(
+            working_dir=str(self.rag_storage_dir),
+            parser="mineru",
+            enable_image_processing=True,
+            enable_table_processing=True,
+            enable_equation_processing=True,
+        )
 
-        # Define LLM model function
+        model = self.llm_cfg.model
+        api_key = self.api_key or self.llm_cfg.api_key
+        base_url = self.base_url or self.llm_cfg.base_url
+
         def llm_model_func(prompt, system_prompt=None, history_messages=[], **kwargs):
             return openai_complete_if_cache(
                 model,
                 prompt,
                 system_prompt=system_prompt,
                 history_messages=history_messages,
-                api_key=self.api_key,
-                base_url=self.base_url,
+                api_key=api_key,
+                base_url=base_url,
                 **kwargs,
             )
 
-        # Define vision model function for image processing
         def vision_model_func(
             prompt,
             system_prompt=None,
@@ -199,49 +178,32 @@ class DocumentAdder:
             messages=None,
             **kwargs,
         ):
-            # Determine which model to use: vision model for images, default LLM for text
-            use_vision_model = image_data is not None and self.vision_cfg
-
-            if use_vision_model:
-                # Use vision model (GLM-4.5V) for image processing
-                model_to_use = self.vision_cfg["model"]
-                api_key_to_use = self.vision_cfg["api_key"]
-                base_url_to_use = self.vision_cfg["base_url"]
-            else:
-                # Use default LLM model (GLM-4.7) for text processing
-                model_to_use = model
-                api_key_to_use = self.api_key
-                base_url_to_use = self.base_url
-
-            # If messages format is provided, use it directly
             if messages:
-                # Remove 'messages' and other message-related params from kwargs to avoid duplicate parameter
                 clean_kwargs = {
                     k: v
                     for k, v in kwargs.items()
                     if k not in ["messages", "prompt", "system_prompt", "history_messages"]
                 }
                 return openai_complete_if_cache(
-                    model_to_use,
-                    prompt="",  # Empty prompt when using messages
+                    model,
+                    prompt="",
                     system_prompt=None,
                     history_messages=[],
                     messages=messages,
-                    api_key=api_key_to_use,
-                    base_url=base_url_to_use,
+                    api_key=api_key,
+                    base_url=base_url,
                     **clean_kwargs,
                 )
             # Traditional single image format
             if image_data:
-                # Remove message-related params from kwargs to avoid duplicate parameter
                 clean_kwargs = {
                     k: v
                     for k, v in kwargs.items()
                     if k not in ["messages", "prompt", "system_prompt", "history_messages"]
                 }
                 return openai_complete_if_cache(
-                    model_to_use,
-                    prompt="",  # Empty prompt when using messages
+                    model,
+                    prompt="",
                     system_prompt=None,
                     history_messages=[],
                     messages=[
@@ -263,27 +225,43 @@ class DocumentAdder:
                             else {"role": "user", "content": prompt}
                         ),
                     ],
-                    api_key=api_key_to_use,
-                    base_url=base_url_to_use,
+                    api_key=api_key,
+                    base_url=base_url,
                     **clean_kwargs,
                 )
-            # Pure text format
             return llm_model_func(prompt, system_prompt, history_messages, **kwargs)
 
-        # Define embedding function
-        embedding_cfg = self.embedding_cfg
-        embedding_api_key = embedding_cfg["api_key"] or self.api_key
-        embedding_base_url = embedding_cfg["base_url"] or self.base_url
+        # Define embedding function using unified EmbeddingClient
+        # Reset client to pick up latest config (including active provider from UI)
+        from src.services.embedding import reset_embedding_client
+
+        reset_embedding_client()
+
+        embedding_cfg = get_embedding_config()  # Reload config
+        embedding_client = get_embedding_client()  # Get fresh client with new config
+
+        logger.info(
+            f"Using embedding: {embedding_cfg.model} "
+            f"({embedding_cfg.dim}D, {embedding_cfg.binding})"
+        )
+
+        # Create async wrapper compatible with LightRAG's expected signature
+        async def unified_embed_func(texts):
+            """
+            Unified embedding function using EmbeddingClient.
+            Supports multiple providers: OpenAI, Cohere, Jina, Ollama, etc.
+            """
+            try:
+                embeddings = await embedding_client.embed(texts)
+                return embeddings
+            except Exception as e:
+                logger.error(f"Embedding failed: {e}")
+                raise
+
         embedding_func = EmbeddingFunc(
-            embedding_dim=embedding_cfg["dim"],
-            max_token_size=embedding_cfg["max_tokens"],
-            func=lambda texts: openai_embed.func(
-                texts,
-                model=embedding_cfg["model"],
-                api_key=embedding_api_key,
-                base_url=embedding_base_url,
-                embedding_dim=embedding_cfg["dim"],  # 传递维度参数
-            ),
+            embedding_dim=embedding_cfg.dim,
+            max_token_size=embedding_cfg.max_tokens,
+            func=unified_embed_func,
         )
 
         # Initialize RAGAnything with existing storage and log forwarding
@@ -299,80 +277,72 @@ class DocumentAdder:
             await rag._ensure_lightrag_initialized()
             logger.info("✓ Loaded existing knowledge base")
 
-        # Process each new document with pipeline-style parallelization
-        import asyncio
-
+        # Process each new document
         processed_files = []
         total_files = len(new_files)
-        completed_count = 0
+        for idx, doc_file in enumerate(new_files, 1):
+            logger.info(f"\nProcessing: {doc_file.name}")
 
-        # Semaphore to limit concurrent processing
-        semaphore = asyncio.Semaphore(config.max_concurrent_files)
+            # Update progress
+            if self.progress_tracker:
+                from src.knowledge.progress_tracker import ProgressStage
 
-        async def process_single_document(doc_file, idx):
-            """Process a single document with semaphore control"""
-            async with semaphore:
-                logger.info(f"\n🚀 Starting [{idx}/{total_files}]: {doc_file.name}")
+                self.progress_tracker.update(
+                    ProgressStage.PROCESSING_FILE,
+                    f"Processing: {doc_file.name}",
+                    current=idx,
+                    total=total_files,
+                    file_name=doc_file.name,
+                )
 
-                # Update progress
+            try:
+                # Use RAGAnything's process_document_complete method with timeout
+                logger.info("  → Starting document processing...")
+                await asyncio.wait_for(
+                    rag.process_document_complete(
+                        file_path=str(doc_file),
+                        output_dir=str(self.content_list_dir),
+                        parse_method="auto",
+                    ),
+                    timeout=600.0,  # 10 minute timeout
+                )
+                logger.info(f"  ✓ Successfully processed: {doc_file.name}")
+                processed_files.append(doc_file)
+
+                # Content list should be automatically saved
+                doc_name = doc_file.stem
+                content_list_file = self.content_list_dir / f"{doc_name}.json"
+                if content_list_file.exists():
+                    logger.info(f"  ✓ Content list saved: {content_list_file.name}")
+
+            except asyncio.TimeoutError:
+                logger.error(f"  ✗ Processing timeout for {doc_file.name} (>10 minutes)")
+                logger.error("  Possible causes: Large PDF, slow embedding API, network issues")
                 if self.progress_tracker:
                     from src.knowledge.progress_tracker import ProgressStage
 
                     self.progress_tracker.update(
-                        ProgressStage.PROCESSING_FILE,
-                        f"Processing: {doc_file.name}",
+                        ProgressStage.ERROR,
+                        f"Timeout processing: {doc_file.name}",
                         current=idx,
                         total=total_files,
-                        file_name=doc_file.name,
+                        error="Processing timeout (>10 minutes)",
                     )
+            except Exception as e:
+                logger.error(f"  ✗ Processing failed {doc_file.name}: {e!s}")
+                import traceback
 
-                try:
-                    # Use RAGAnything's process_document_complete method
-                    await rag.process_document_complete(
-                        file_path=str(doc_file),
-                        output_dir=str(self.content_list_dir),
-                        parse_method="auto",
+                logger.error(traceback.format_exc())
+                if self.progress_tracker:
+                    from src.knowledge.progress_tracker import ProgressStage
+
+                    self.progress_tracker.update(
+                        ProgressStage.ERROR,
+                        f"Error processing: {doc_file.name}",
+                        current=idx,
+                        total=total_files,
+                        error=str(e),
                     )
-                    logger.info(f"  ✅ Successfully processed: {doc_file.name}")
-
-                    # Content list should be automatically saved
-                    doc_name = doc_file.stem
-                    content_list_file = self.content_list_dir / f"{doc_name}.json"
-                    if content_list_file.exists():
-                        logger.info(f"  ✓ Content list saved: {content_list_file.name}")
-
-                    return doc_file
-
-                except Exception as e:
-                    logger.error(f"  ✗ Processing failed {doc_file.name}: {e!s}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-                    return None
-
-        # Create all tasks as actual Task objects
-        tasks = [
-            asyncio.create_task(process_single_document(doc_file, idx))
-            for idx, doc_file in enumerate(new_files, 1)
-        ]
-
-        logger.info(f"\n🔄 Starting parallel processing with {config.max_concurrent_files} workers...")
-        logger.info(f"📊 Total files: {total_files}, Pipeline mode: ON (maintain {config.max_concurrent_files} concurrent)")
-
-        # Process tasks as they complete (pipeline style)
-        for completed_task in asyncio.as_completed(tasks):
-            result = await completed_task
-            completed_count += 1
-
-            if result is not None:
-                processed_files.append(result)
-
-            logger.info(f"\n📈 Progress: {completed_count}/{total_files} files completed")
-
-            # Show currently active tasks
-            active_count = sum(1 for t in tasks if not t.done())
-            remaining_count = len(tasks) - completed_count
-            if remaining_count > 0:
-                logger.info(f"⏳ Still processing: {remaining_count} files ({active_count} actively working)")
 
         # Copy extracted images
         rag_images_dir = self.rag_storage_dir / "images"
@@ -487,6 +457,10 @@ class DocumentAdder:
         logger.info("🔍 Extracting numbered items for new documents...")
         logger.info("=" * 60 + "\n")
 
+        # Use credentials from config as fallback
+        api_key = self.api_key or self.llm_cfg.api_key
+        base_url = self.base_url or self.llm_cfg.base_url
+
         output_file = self.kb_dir / "numbered_items.json"
 
         try:
@@ -508,8 +482,8 @@ class DocumentAdder:
                 process_content_list(
                     content_list_file=content_list_file,
                     output_file=output_file,
-                    api_key=self.api_key,
-                    base_url=self.base_url,
+                    api_key=api_key,
+                    base_url=base_url,
                     batch_size=batch_size,
                     merge=merge,
                 )
@@ -592,13 +566,11 @@ Usage examples:
     parser.add_argument("--docs-dir", help="Directory containing documents to add")
     parser.add_argument(
         "--base-dir",
-        default="./data/knowledge_bases",
-        help="Knowledge base base directory (default: ./data/knowledge_bases)",
+        default="./knowledge_bases",
+        help="Knowledge base base directory (default: ./knowledge_bases)",
     )
-    parser.add_argument(
-        "--api-key", default=os.getenv("LLM_BINDING_API_KEY"), help="OpenAI API key"
-    )
-    parser.add_argument("--base-url", default=os.getenv("LLM_BINDING_HOST"), help="API base URL")
+    parser.add_argument("--api-key", default=os.getenv("LLM_API_KEY"), help="OpenAI API key")
+    parser.add_argument("--base-url", default=os.getenv("LLM_HOST"), help="API base URL")
     parser.add_argument(
         "--allow-duplicates",
         action="store_true",
@@ -622,7 +594,7 @@ Usage examples:
     # Check API key
     if not args.skip_processing and not args.api_key:
         logger.error("Error: OpenAI API key required")
-        logger.error("Please set LLM_BINDING_API_KEY environment variable or use --api-key option")
+        logger.error("Please set LLM_API_KEY environment variable or use --api-key option")
         return
 
     # Collect document files

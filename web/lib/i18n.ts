@@ -140,6 +140,36 @@ export const translations = {
     "Generate Quiz": "Generate Quiz",
     "Start Research": "Start Research",
 
+    // Home Page
+    Home: "Home",
+    History: "History",
+    "Welcome to DeepTutor": "Welcome to DeepTutor",
+    "How can I help you today?": "How can I help you today?",
+    "Ask anything...": "Ask anything...",
+    "Type your message...": "Type your message...",
+    RAG: "RAG",
+    "Explore Modules": "Explore Modules",
+    "Smart Problem Solving": "Smart Problem Solving",
+    "Generate Practice Questions": "Generate Practice Questions",
+    "Deep Research Reports": "Deep Research Reports",
+    "Generate Novel Ideas": "Generate Novel Ideas",
+    "Searching the web...": "Searching the web...",
+    "Generating response...": "Generating response...",
+    "Clear Chat": "Clear Chat",
+    Sources: "Sources",
+    "From Knowledge Base": "From Knowledge Base",
+    "From Web": "From Web",
+    "New Chat": "New Chat",
+
+    // History Page
+    "Chat History": "Chat History",
+    "All Activities": "All Activities",
+    "Filter by type": "Filter by type",
+    All: "All",
+    Chat: "Chat",
+    "Your activities will appear here": "Your activities will appear here",
+    Continue: "Continue",
+
     // Solver Page
     "Smart Problem Solver": "Smart Problem Solver",
     "Ask any question and get AI-powered solutions":
@@ -563,6 +593,36 @@ export const translations = {
     "Ask a Question": "提问问题",
     "Generate Quiz": "生成测验",
     "Start Research": "开始研究",
+
+    // Home Page
+    Home: "首页",
+    History: "历史记录",
+    "Welcome to DeepTutor": "欢迎使用 DeepTutor",
+    "How can I help you today?": "今天能为您做些什么？",
+    "Ask anything...": "提问任何问题...",
+    "Type your message...": "输入您的消息...",
+    RAG: "检索增强",
+    "Explore Modules": "探索模块",
+    "Smart Problem Solving": "智能问题求解",
+    "Generate Practice Questions": "生成练习题目",
+    "Deep Research Reports": "深度研究报告",
+    "Generate Novel Ideas": "生成新颖创意",
+    "Searching the web...": "正在搜索网络...",
+    "Generating response...": "正在生成回复...",
+    "Clear Chat": "清空对话",
+    Sources: "来源",
+    "From Knowledge Base": "来自知识库",
+    "From Web": "来自网络",
+    "New Chat": "新对话",
+
+    // History Page
+    "Chat History": "对话历史",
+    "All Activities": "所有活动",
+    "Filter by type": "按类型筛选",
+    All: "全部",
+    Chat: "对话",
+    "Your activities will appear here": "您的活动将显示在这里",
+    Continue: "继续",
 
     // Solver Page
     "Smart Problem Solver": "智能问题求解器",

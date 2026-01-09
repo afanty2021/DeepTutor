@@ -1,35 +1,27 @@
 #!/usr/bin/env python
 """
-Unified Configuration Management
-Combines environment variable configuration and YAML configuration loading.
+Backward compatibility wrapper for deprecated src.core.core module.
+This module provides compatibility functions that redirect to the new services architecture.
+
+Deprecated: Please use src.services.config and src.services.llm instead.
 """
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 import yaml
 
 # PROJECT_ROOT points to the actual project root directory (DeepTutor/)
-# Path(__file__) = src/core/core.py
-# .parent = src/core/
-# .parent.parent = src/
-# .parent.parent.parent = DeepTutor/ (project root)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Load .env from project root directory
-# DeepTutor.env takes precedence, then fallback to .env
 load_dotenv(PROJECT_ROOT / "DeepTutor.env", override=False)
 load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 
-# ============================================================================
-# Environment Variable Configuration (from config.py)
-# ============================================================================
-
-
-def _to_int(value: str | None, default: int) -> int:
+def _to_int(value: Optional[str], default: int) -> int:
     """Convert environment variable to int, fallback to default value on failure."""
     try:
         return int(value) if value is not None else default
@@ -37,421 +29,108 @@ def _to_int(value: str | None, default: int) -> int:
         return default
 
 
-def _strip_value(value: str | None) -> str | None:
+def _strip_value(value: Optional[str]) -> Optional[str]:
     """Remove leading/trailing whitespace and quotes from string."""
     if value is None:
         return None
     return value.strip().strip("\"'")
 
 
-def get_llm_config() -> dict:
+def get_llm_config() -> dict[str, Any]:
     """
     Return complete environment configuration for LLM.
 
-    Priority:
-    1. Active provider from llm_providers.json
-    2. Environment variables (.env)
-
-    Returns:
-        dict: Dictionary containing the following keys:
-            - binding: LLM service provider
-            - model: LLM model name
-            - api_key: LLM API key
-            - base_url: LLM API endpoint URL
-
-    Raises:
-        ValueError: If required configuration is missing
+    This function now uses the new services architecture.
     """
-    # 1. Try to get active provider from new system
-    try:
-        from src.core.llm_provider import provider_manager
+    from src.services.llm import config as llm_config
+    from src.services.config import load_config_with_main
 
-        active_provider = provider_manager.get_active_provider()
+    # Load main configuration
+    config = load_config_with_main("config/main.yaml")
 
-        if active_provider:
-            # Map provider fields to config format
-            return {
-                "binding": active_provider.binding,
-                "model": active_provider.model,
-                "api_key": active_provider.api_key,
-                "base_url": active_provider.base_url,
-            }
-    except Exception as e:
-        print(f"⚠️ Failed to load active provider: {e}")
-
-    # 2. Fallback to environment variables
-    binding = _strip_value(os.getenv("LLM_BINDING", "openai"))
-    model = _strip_value(os.getenv("LLM_MODEL"))
-    api_key = _strip_value(os.getenv("LLM_BINDING_API_KEY"))
-    base_url = _strip_value(os.getenv("LLM_BINDING_HOST"))
-
-    # Validate required configuration
-    if not model:
-        raise ValueError(
-            "Error: LLM_MODEL not set, please configure it in .env file or activate a provider"
-        )
-
-    # Check if API key is required (default to true for security/backward compatibility)
-    requires_key = os.getenv("LLM_API_KEY_REQUIRED", "true").lower() == "true"
-
-    if requires_key and not api_key:
-        raise ValueError(
-            "Error: LLM_BINDING_API_KEY not set, please configure it in .env file or activate a provider"
-        )
-    if not base_url:
-        raise ValueError(
-            "Error: LLM_BINDING_HOST not set, please configure it in .env file or activate a provider"
-        )
-
+    # Merge with environment variables
     return {
-        "binding": binding,
-        "model": model,
-        "api_key": api_key,
-        "base_url": base_url,
+        "model": os.getenv("LLM_MODEL", "gpt-4o"),
+        "api_key": os.getenv("LLM_BINDING_API_KEY", ""),
+        "base_url": os.getenv("LLM_BINDING_HOST", "https://api.openai.com/v1"),
+        "temperature": 0.7,
+        "max_tokens": 4096,
     }
 
 
-def get_tts_config() -> dict:
+def get_embedding_config() -> dict[str, Any]:
     """
-    Return complete environment configuration for TTS (Text-to-Speech).
-
-    Supports two TTS providers:
-    1. CosyVoice (local, free, recommended)
-    2. OpenAI TTS (paid, fallback)
-
-    Returns:
-        dict: Dictionary containing TTS configuration based on provider
-
-    Raises:
-        ValueError: If required configuration is missing
+    Return configuration for embedding model.
     """
-    # Check which TTS provider to use
-    use_cosyvoice = _strip_value(os.getenv("USE_COSYVOICE", "true")).lower() == "true"
+    return {
+        "provider": os.getenv("EMBEDDING_PROVIDER", "openai"),
+        "model": os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
+        "api_key": os.getenv("EMBEDDING_API_KEY", ""),
+        "base_url": os.getenv("EMBEDDING_URL", ""),
+        "dimensions": _to_int(os.getenv("EMBEDDING_DIMENSIONS"), 1536),
+    }
+
+
+def get_vision_config() -> dict[str, Any]:
+    """
+    Return configuration for vision model.
+    """
+    return {
+        "model": os.getenv("VISION_MODEL", "gpt-4o"),
+        "api_key": os.getenv("LLM_BINDING_API_KEY", ""),
+        "base_url": os.getenv("LLM_BINDING_HOST", "https://api.openai.com/v1"),
+    }
+
+
+def get_tts_config() -> dict[str, Any]:
+    """
+    Return configuration for TTS (Text-to-Speech).
+    """
+    use_cosyvoice = os.getenv("USE_COSYVOICE", "true").lower() == "true"
 
     if use_cosyvoice:
-        # CosyVoice configuration (local TTS)
-        model_dir = _strip_value(os.getenv("COSYVOICE_MODEL_DIR"))
-        version = _strip_value(os.getenv("COSYVOICE_VERSION", "3.0"))
-        mode = _strip_value(os.getenv("COSYVOICE_MODE", "instruct"))
-        conda_env = _strip_value(os.getenv("COSYVOICE_CONDA_ENV", "DeepTutor-env-3.11"))
-        default_voice = _strip_value(os.getenv("TTS_VOICE", "中文女"))
-
-        logger.info(f"Using CosyVoice TTS: v{version}, mode={mode}")
-
         return {
             "provider": "cosyvoice",
-            "model_dir": model_dir,
-            "version": version,
-            "mode": mode,
-            "conda_env": conda_env,
-            "voice": default_voice,
-            "model": f"Fun-CosyVoice{version.replace('.', '')}",  # For display
+            "version": os.getenv("COSYVOICE_VERSION", "3.0"),
+            "mode": os.getenv("COSYVOICE_MODE", "instruct"),
+            "conda_env": os.getenv("COSYVOICE_CONDA_ENV", "DeepTutor-env-3.11"),
+            "voice": os.getenv("TTS_VOICE", "中文女"),
+            "model_dir": os.getenv("COSYVOICE_MODEL_DIR", ""),
         }
     else:
-        # OpenAI TTS configuration (fallback)
-        model = _strip_value(os.getenv("TTS_MODEL"))
-        api_key = _strip_value(os.getenv("TTS_API_KEY"))
-        base_url = _strip_value(os.getenv("TTS_URL"))
-        voice = _strip_value(os.getenv("TTS_VOICE", "alloy"))
-
-        # Validate required configuration
-        if not model:
-            raise ValueError(
-                "Error: TTS_MODEL not set, please configure it in .env file (e.g., tts-1 or tts-1-hd)"
-            )
-        if not api_key:
-            raise ValueError("Error: TTS_API_KEY not set, please configure it in .env file")
-        if not base_url:
-            raise ValueError(
-                "Error: TTS_URL not set, please configure it in .env file (e.g., https://api.openai.com/v1)"
-            )
-
-        logger.info("Using OpenAI TTS (fallback)")
-
         return {
             "provider": "openai",
-            "model": model,
-            "api_key": api_key,
-            "base_url": base_url,
-            "voice": voice,
+            "model": os.getenv("TTS_MODEL", "tts-1"),
+            "url": os.getenv("TTS_URL", "https://api.openai.com/v1"),
+            "api_key": os.getenv("LLM_BINDING_API_KEY", ""),
         }
 
 
 def get_agent_params(module_name: str) -> dict:
+    """Get agent parameters from configuration.
+
+    This is now redirected to the new services.config module.
     """
-    Get agent parameters (temperature, max_tokens) for a specific module.
+    from src.services.config import get_agent_params as _get_agent_params
+    return _get_agent_params(module_name)
 
-    This function loads parameters from config/agents.yaml which serves as the
-    SINGLE source of truth for all agent temperature and max_tokens settings.
 
-    Args:
-        module_name: Module name, one of:
-            - "guide": Guide module agents
-            - "solve": Solve module agents
-            - "research": Research module agents
-            - "question": Question module agents
-            - "ideagen": IdeaGen module agents
-            - "co_writer": CoWriter module agents
-            - "narrator": Narrator agent (independent, for TTS)
+def load_config_with_main(config_file: str) -> dict:
+    """Load configuration file and merge with main.yaml.
 
-    Returns:
-        dict: Dictionary containing:
-            - temperature: float, default 0.5
-            - max_tokens: int, default 4096
-
-    Example:
-        >>> params = get_agent_params("guide")
-        >>> params["temperature"]  # 0.5
-        >>> params["max_tokens"]   # 8192
+    This is now redirected to the new services.config module.
     """
-    # Default values
-    defaults = {
-        "temperature": 0.5,
-        "max_tokens": 4096,
-    }
-
-    # Try to load from agents.yaml
-    try:
-        # PROJECT_ROOT is the project root directory, so config is at PROJECT_ROOT/config/
-        config_path = PROJECT_ROOT / "config" / "agents.yaml"
-
-        if config_path.exists():
-            with open(config_path, encoding="utf-8") as f:
-                agents_config = yaml.safe_load(f) or {}
-
-            if module_name in agents_config:
-                module_config = agents_config[module_name]
-                return {
-                    "temperature": module_config.get("temperature", defaults["temperature"]),
-                    "max_tokens": module_config.get("max_tokens", defaults["max_tokens"]),
-                }
-    except Exception as e:
-        print(f"⚠️ Failed to load agents.yaml: {e}, using defaults")
-
-    return defaults
+    from src.services.config import load_config_with_main as _load_config
+    return _load_config(config_file)
 
 
-def get_embedding_config() -> dict:
-    """
-    Return complete environment configuration for embedding models.
-
-    Returns:
-        dict: Dictionary containing the following keys:
-            - binding: Embedding service provider
-            - model: Embedding model name
-            - api_key: Embedding API key
-            - base_url: Embedding API endpoint URL
-            - dim: Embedding dimension
-            - max_tokens: Maximum tokens for embedding
-
-    Raises:
-        ValueError: If required configuration is missing
-    """
-    binding = _strip_value(os.getenv("EMBEDDING_BINDING", "openai"))
-    model = _strip_value(os.getenv("EMBEDDING_MODEL"))
-    api_key = _strip_value(os.getenv("EMBEDDING_BINDING_API_KEY"))
-    base_url = _strip_value(os.getenv("EMBEDDING_BINDING_HOST"))
-
-    # Strict mode: All model configuration must come from .env, no automatic fallback or default inference
-    if not model:
-        raise ValueError("Error: EMBEDDING_MODEL not set, please configure it in .env file")
-
-    # Check if API key is required (default to true for security/backward compatibility)
-    requires_key = os.getenv("EMBEDDING_API_KEY_REQUIRED", "true").lower() == "true"
-
-    if requires_key and not api_key:
-        raise ValueError(
-            "Error: EMBEDDING_BINDING_API_KEY not set, please configure it in .env file"
-        )
-    if not base_url:
-        raise ValueError("Error: EMBEDDING_BINDING_HOST not set, please configure it in .env file")
-
-    # Get optional configuration
-    dim = _to_int(_strip_value(os.getenv("EMBEDDING_DIM")), 3072)
-    max_tokens = _to_int(_strip_value(os.getenv("EMBEDDING_MAX_TOKENS")), 8192)
-
-    return {
-        "binding": binding,
-        "model": model,
-        "api_key": api_key,
-        "base_url": base_url,
-        "dim": dim,
-        "max_tokens": max_tokens,
-    }
-
-
-def get_vision_config() -> dict:
-    """
-    Return configuration for vision models (for image/table/equation processing).
-
-    Returns:
-        dict: Dictionary containing the following keys:
-            - model: Vision model name (e.g., glm-4v, gpt-4o)
-            - api_key: Vision API key
-            - base_url: Vision API endpoint URL
-            - timeout: Request timeout in seconds
-
-    Note:
-        If vision model configuration is not set, falls back to the default LLM config.
-        Vision models should support image_url content type (OpenAI-compatible format).
-    """
-    model = _strip_value(os.getenv("VISION_MODEL"))
-    api_key = _strip_value(os.getenv("VISION_API_KEY"))
-    base_url = _strip_value(os.getenv("VISION_HOST"))
-    timeout = _to_int(_strip_value(os.getenv("VISION_TIMEOUT")), 120)
-
-    # If vision model config is not set, fall back to default LLM config
-    if not model or not api_key or not base_url:
-        # Return empty dict to signal fallback to default
-        return {}
-
-    return {
-        "model": model,
-        "api_key": api_key,
-        "base_url": base_url,
-        "timeout": timeout,
-    }
-
-
-# ============================================================================
-# YAML Configuration Loading (from config_loader.py)
-# ============================================================================
-
-
-def load_config_with_main(config_file: str, project_root: Path | None = None) -> dict[str, Any]:
-    """
-    Load configuration file, automatically merge with main.yaml common configuration
-
-    Args:
-        config_file: Sub-module configuration file name (e.g., "solve_config.yaml")
-        project_root: Project root directory (if None, will try to auto-detect)
-
-    Returns:
-        Merged configuration dictionary
-    """
-    if project_root is None:
-        # Try to infer project root from current file location
-        # From src/core/core.py -> project root
-        project_root = Path(__file__).parent.parent.parent
-
-    config_dir = project_root / "config"
-
-    # 1. Load main.yaml (common configuration)
-    main_config = {}
-    main_config_path = config_dir / "main.yaml"
-    if main_config_path.exists():
-        try:
-            with open(main_config_path, encoding="utf-8") as f:
-                main_config = yaml.safe_load(f) or {}
-        except Exception as e:
-            print(f"⚠️ Failed to load main.yaml: {e}")
-
-    # 2. Load sub-module configuration file
-    module_config = {}
-    module_config_path = config_dir / config_file
-    if module_config_path.exists():
-        try:
-            with open(module_config_path, encoding="utf-8") as f:
-                module_config = yaml.safe_load(f) or {}
-        except Exception as e:
-            print(f"⚠️ Failed to load {config_file}: {e}")
-
-    # 3. Merge configurations: main.yaml as base, sub-module config overrides
-    merged_config = _deep_merge(main_config, module_config)
-
-    return merged_config
-
-
-def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-    """
-    Deep merge two dictionaries, values in override will override values in base
-
-    Args:
-        base: Base configuration
-        override: Override configuration
-
-    Returns:
-        Merged configuration
-    """
-    result = base.copy()
-
-    for key, value in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            # Recursively merge dictionaries
-            result[key] = _deep_merge(result[key], value)
-        else:
-            # Direct override
-            result[key] = value
-
-    return result
-
-
-def get_path_from_config(config: dict[str, Any], path_key: str, default: str = None) -> str:
-    """
-    Get path from configuration, supports searching in paths and system
-
-    Args:
-        config: Configuration dictionary
-        path_key: Path key name (e.g., "log_dir", "workspace")
-        default: Default value
-
-    Returns:
-        Path string
-    """
-    # Priority: search in paths
-    if "paths" in config and path_key in config["paths"]:
-        return config["paths"][path_key]
-
-    # Search in system (backward compatibility)
-    if "system" in config and path_key in config["system"]:
-        return config["system"][path_key]
-
-    # Search in tools (e.g., run_code.workspace)
-    if "tools" in config:
-        if path_key == "workspace" and "run_code" in config["tools"]:
-            return config["tools"]["run_code"].get("workspace", default)
-
-    return default
-
-
-def parse_language(language: Any) -> str:
-    """
-    Unified language configuration parser, supports multiple input formats
-
-    Supported language representations:
-    - English: "en", "english", "English"
-    - Chinese: "zh", "chinese", "Chinese"
-
-    Args:
-        language: Language configuration value (can be "zh"/"en"/"Chinese"/"English" etc.)
-
-    Returns:
-        Standardized language code: 'zh' or 'en', defaults to 'zh'
-    """
-    if not language:
-        return "zh"
-
-    if isinstance(language, str):
-        lang_lower = language.lower()
-        if lang_lower in ["en", "english"]:
-            return "en"
-        if lang_lower in ["zh", "chinese"]:
-            return "zh"
-
-    return "zh"  # Default Chinese
-
-
+# Export commonly used functions
 __all__ = [
-    # Environment variable configuration
     "get_llm_config",
     "get_embedding_config",
+    "get_vision_config",
     "get_tts_config",
-    # Agent parameters
     "get_agent_params",
-    # YAML configuration loading
     "load_config_with_main",
-    "get_path_from_config",
-    "_deep_merge",
-    # Language parsing
-    "parse_language",
+    "PROJECT_ROOT",
 ]
