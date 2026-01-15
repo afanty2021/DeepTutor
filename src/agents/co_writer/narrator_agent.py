@@ -1,65 +1,27 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-NarratorAgent - Note Narration Agent (CosyVoice + OpenAI Support)
-
-Converts note content into narration scripts and generates TTS audio using:
-- CosyVoice (local, free) - Recommended
-- OpenAI TTS (paid, fallback)
-
-Uses unified PromptManager for prompt loading.
+NarratorAgent - Note narration agent.
+Inherits from unified BaseAgent with special TTS configuration.
 """
 
 from datetime import datetime
 import json
-import logging
+import os
 from pathlib import Path
 import re
-import sys
 from typing import Any, Optional
 from urllib.parse import urlparse
 import uuid
 
-from openai import OpenAI as OpenAIClient
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 
-# Add project root for imports
-_project_root = Path(__file__).parent.parent.parent.parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
-
-from src.logging import get_logger
-from src.services.config import get_agent_params, load_config_with_main
-from src.services.llm import complete as llm_complete
-from src.services.llm import get_llm_config
-from src.services.prompt import get_prompt_manager
+from src.agents.base_agent import BaseAgent
 from src.services.tts import get_tts_config
 
-# Import shared stats from edit_agent
-try:
-    from .edit_agent import get_stats
-except ImportError:
-    # Fallback if edit_agent imports fail
-    def get_stats():
-        return None
+# Import shared stats from edit_agent for legacy compatibility
 
-# Import CosyVoice TTS tool
-try:
-    from src.tools.cosyvoice_tts import CosyVoiceTTS
-    COSYVOICE_AVAILABLE = True
-except ImportError:
-    COSYVOICE_AVAILABLE = False
-    CosyVoiceTTS = None
-
-
-# Initialize logger with config
-try:
-    config = load_config_with_main("solve_config.yaml", _project_root)
-    log_dir = config.get("paths", {}).get("user_log_dir") or config.get("logging", {}).get("log_dir")
-    logger = get_logger("Narrator", log_dir=log_dir)
-except Exception:
-    logger = logging.getLogger(__name__)
-
-# Storage path
+# Define storage path (unified under user/co-writer/ directory)
 USER_DIR = Path(__file__).parent.parent.parent.parent / "data" / "user" / "co-writer" / "audio"
 
 
@@ -68,108 +30,117 @@ def ensure_dirs():
     USER_DIR.mkdir(parents=True, exist_ok=True)
 
 
-class NarratorAgent:
+class NarratorAgent(BaseAgent):
     """Note Narration Agent - Generate narration script and convert to audio"""
 
-    # Voice mappings for different TTS providers
-    COSYVOICE_VOICES = {
-        "alloy": "中文女",
-        "female": "中文女",
-        "male": "中文男",
-        "zh-female": "中文女",
-        "zh-male": "中文男",
-    }
+    def __init__(self, language: str = "en"):
+        # Use "narrator" as module_name to get independent temperature/max_tokens config
+        super().__init__(
+            module_name="narrator",
+            agent_name="narrator_agent",
+            language=language,
+        )
 
-    OPENAI_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
+        # Override prompts to load from co_writer module
+        # (narrator_agent prompts are stored under co_writer/prompts/)
+        from src.services.prompt import get_prompt_manager
 
-    def __init__(self, language: str = "en", use_cosyvoice: bool = None):
-        self.language = language
-
-        # Load prompts using unified PromptManager
-        self._prompts = get_prompt_manager().load_prompts(
+        self.prompts = get_prompt_manager().load_prompts(
             module_name="co_writer",
             agent_name="narrator_agent",
             language=language,
         )
 
-        # Load agent parameters
-        try:
-            self._agent_params = get_agent_params("narrator")
-        except Exception:
-            self._agent_params = {"temperature": 0.7, "max_tokens": 4000}
+        # Load TTS-specific configuration
+        self._load_tts_config()
 
-        # Load LLM config
-        try:
-            self.llm_config = get_llm_config()
-        except Exception as e:
-            logger.warning(f"Failed to load LLM config: {e}")
-            self.llm_config = None
-
-        # Determine which TTS to use
-        if use_cosyvoice is None:
-            # Auto-detect: prefer CosyVoice if available
-            use_cosyvoice = COSYVOICE_AVAILABLE
-
-        self.use_cosyvoice = use_cosyvoice
-
-        # Initialize TTS
-        if self.use_cosyvoice:
-            self._init_cosyvoice()
-        else:
-            self._init_openai_tts()
-
-    def _init_cosyvoice(self):
-        """Initialize CosyVoice TTS"""
-        if not COSYVOICE_AVAILABLE:
-            raise ValueError("CosyVoice not available. Please install CosyVoice.")
-
-        try:
-            # Try to get CosyVoice config from environment
-            import os
-            model_dir = os.getenv("COSYVOICE_MODEL_DIR")
-            version = os.getenv("COSYVOICE_VERSION", "3.0")
-            mode = os.getenv("COSYVOICE_MODE", "instruct")
-            conda_env = os.getenv("COSYVOICE_CONDA_ENV", "DeepTutor-env-3.11")
-
-            self.cosyvoice = CosyVoiceTTS(
-                model_dir=model_dir,
-                version=version,
-                mode=mode,
-                conda_env=conda_env,
-            )
-
-            logger.info(f"✅ Using CosyVoice TTS (v{version}, mode={mode})")
-
-            # Set default voice
-            self.default_voice = "中文女"
-
-        except Exception as e:
-            logger.error(f"Failed to initialize CosyVoice: {e}", exc_info=True)
-            raise
-
-    def _init_openai_tts(self):
-        """Initialize OpenAI TTS (fallback)"""
+    def _load_tts_config(self):
+        """Load TTS-specific configuration from unified config service."""
         try:
             self.tts_config = get_tts_config()
-            self._validate_tts_config()
-
-            logger.info("✅ Using OpenAI TTS (fallback)")
+            # Get voice from unified config (defaults to "alloy")
             self.default_voice = self.tts_config.get("voice", "alloy")
-
+            self.logger.info(f"TTS settings loaded: voice={self.default_voice}")
+            # Validate TTS configuration
+            self._validate_tts_config()
         except Exception as e:
-            logger.warning(f"OpenAI TTS not available: {e}")
+            self.logger.error(f"Failed to load TTS config: {e}", exc_info=True)
             self.tts_config = None
             self.default_voice = "alloy"
 
     def _validate_tts_config(self):
-        """Validate OpenAI TTS configuration"""
+        """Validate TTS configuration completeness and format"""
         if not self.tts_config:
             raise ValueError("TTS config is None")
 
+        # Check required keys
         required_keys = ["model", "api_key", "base_url"]
         missing_keys = [key for key in required_keys if key not in self.tts_config]
         if missing_keys:
             raise ValueError(f"TTS config missing required keys: {missing_keys}")
+
+        # Validate base_url format
+        base_url = self.tts_config["base_url"]
+        if not base_url:
+            raise ValueError("TTS config 'base_url' is empty")
+
+        if not isinstance(base_url, str):
+            raise ValueError(f"TTS config 'base_url' must be a string, got {type(base_url)}")
+
+        # Validate URL format
+        if not base_url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"TTS config 'base_url' must start with http:// or https://, got: {base_url}"
+            )
+
+        try:
+            parsed = urlparse(base_url)
+            if not parsed.netloc:
+                raise ValueError(f"TTS config 'base_url' has invalid format: {base_url}")
+        except Exception as e:
+            raise ValueError(f"TTS config 'base_url' parsing error: {e}")
+
+        # Validate api_key
+        api_key = self.tts_config.get("api_key")
+        if not api_key:
+            raise ValueError("TTS config 'api_key' is empty")
+
+        if not isinstance(api_key, str) or len(api_key.strip()) == 0:
+            raise ValueError("TTS config 'api_key' must be a non-empty string")
+
+        # Validate model
+        model = self.tts_config.get("model")
+        if not model:
+            raise ValueError("TTS config 'model' is empty")
+
+        # Log configuration info (hide sensitive information)
+        api_key_preview = f"{api_key[:8]}...{api_key[-4:]}" if len(api_key) > 12 else "*" * 10
+        self.logger.info("TTS Configuration Loaded (OpenAI API):")
+        self.logger.info(f"  Model: {model}")
+        self.logger.info(f"  Base URL: {base_url}")
+        self.logger.info(f"  API Key: {api_key_preview}")
+        self.logger.info(f"  Default Voice: {self.default_voice}")
+
+    async def process(
+        self,
+        content: str,
+        style: str = "friendly",
+        voice: Optional[str] = None,
+        skip_audio: bool = False,
+    ) -> dict[str, Any]:
+        """
+        Main processing method - alias for narrate().
+
+        Args:
+            content: Note content
+            style: Narration style
+            voice: Voice role
+            skip_audio: Whether to skip audio generation
+
+        Returns:
+            Dict containing script info and optionally audio info
+        """
+        return await self.narrate(content, style, voice, skip_audio)
 
     async def generate_script(self, content: str, style: str = "friendly") -> dict[str, Any]:
         """
@@ -184,68 +155,49 @@ class NarratorAgent:
                 - script: Narration script text
                 - key_points: List of extracted key points
         """
-        # Always refresh LLM config before starting to avoid stale credentials
-        try:
-            self.llm_config = get_llm_config()
-        except Exception as e:
-            logger.error(f"Failed to refresh LLM config: {e}")
-
-        if not self.llm_config:
-            raise ValueError("LLM configuration not available")
-
-        target_length = 4000
+        # Estimate target length: OpenAI TTS supports up to 4096 characters
         is_long_content = len(content) > 5000
 
         style_prompts = {
-            "friendly": self._prompts.get("style_friendly", ""),
-            "academic": self._prompts.get("style_academic", ""),
-            "concise": self._prompts.get("style_concise", ""),
+            "friendly": self.get_prompt("style_friendly", ""),
+            "academic": self.get_prompt("style_academic", ""),
+            "concise": self.get_prompt("style_concise", ""),
         }
 
         length_instruction = (
-            self._prompts.get("length_instruction_long", "")
+            self.get_prompt("length_instruction_long", "")
             if is_long_content
-            else self._prompts.get("length_instruction_short", "")
+            else self.get_prompt("length_instruction_short", "")
         )
 
-        system_template = self._prompts.get("generate_script_system_template", "")
+        system_template = self.get_prompt("generate_script_system_template", "")
         system_prompt = system_template.format(
             style_prompt=style_prompts.get(style, style_prompts["friendly"]),
             length_instruction=length_instruction,
         )
 
         if is_long_content:
-            user_template = self._prompts.get("generate_script_user_long", "")
+            user_template = self.get_prompt("generate_script_user_long", "")
             user_prompt = user_template.format(content=content[:8000] + "...")
         else:
-            user_template = self._prompts.get("generate_script_user_short", "")
+            user_template = self.get_prompt("generate_script_user_short", "")
             user_prompt = user_template.format(content=content)
 
-        logger.info(f"Generating narration script with style: {style}")
+        self.logger.info(f"Generating narration script with style: {style}")
 
-        model = self.llm_config.model
-        response = await llm_complete(
-            binding=self.llm_config.binding,
-            model=model,
-            prompt=user_prompt,
+        # Use inherited call_llm method
+        response = await self.call_llm(
+            user_prompt=user_prompt,
             system_prompt=system_prompt,
-            api_key=self.llm_config.api_key,
-            base_url=self.llm_config.base_url,
-            max_tokens=self._agent_params["max_tokens"],
-            temperature=self._agent_params["temperature"],
+            stage="generate_script",
         )
 
-        # Track token usage
-        stats = get_stats()
-        if stats:
-            stats.add_call(
-                model=model, system_prompt=system_prompt, user_prompt=user_prompt, response=response
-            )
-
-        # Clean and truncate response
+        # Clean and truncate response, ensure it doesn't exceed 4000 characters
         script = response.strip()
         if len(script) > 4000:
-            logger.warning(f"Generated script length {len(script)} exceeds 4000 limit. Truncating...")
+            self.logger.warning(
+                f"Generated script length {len(script)} exceeds 4000 limit. Truncating..."
+            )
             truncated = script[:3997]
             last_period = max(
                 truncated.rfind("。"),
@@ -272,34 +224,19 @@ class NarratorAgent:
 
     async def _extract_key_points(self, content: str) -> list:
         """Extract key points from notes"""
-        if not self.llm_config:
-            return []
-
-        system_prompt = self._prompts.get("extract_key_points_system", "")
-        user_template = self._prompts.get(
+        system_prompt = self.get_prompt("extract_key_points_system", "")
+        user_template = self.get_prompt(
             "extract_key_points_user",
             "Please extract key points from the following notes:\n\n{content}",
         )
         user_prompt = user_template.format(content=content[:4000])
 
         try:
-            model = self.llm_config.model
-            response = await llm_complete(
-                binding=self.llm_config.binding,
-                model=model,
-                prompt=user_prompt,
+            response = await self.call_llm(
+                user_prompt=user_prompt,
                 system_prompt=system_prompt,
-                api_key=self.llm_config.api_key,
-                base_url=self.llm_config.base_url,
-                max_tokens=self._agent_params["max_tokens"],
-                temperature=self._agent_params["temperature"],
+                stage="extract_key_points",
             )
-
-            stats = get_stats()
-            if stats:
-                stats.add_call(
-                    model=model, system_prompt=system_prompt, user_prompt=user_prompt, response=response
-                )
 
             # Try to parse JSON
             json_match = re.search(r"\[.*\]", response, re.DOTALL)
@@ -307,22 +244,16 @@ class NarratorAgent:
                 return json.loads(json_match.group())
             return []
         except Exception as e:
-            logger.warning(f"Failed to extract key points: {e}")
+            self.logger.warning(f"Failed to extract key points: {e}")
             return []
 
-    async def generate_audio(
-        self,
-        script: str,
-        voice: str = None,
-        output_format: str = "mp3"
-    ) -> dict[str, Any]:
+    async def generate_audio(self, script: str, voice: str = None) -> dict[str, Any]:
         """
-        Convert narration script to audio
+        Convert narration script to audio using OpenAI TTS API
 
         Args:
             script: Narration script text
-            voice: Voice role (CosyVoice: 中文女/中文男, OpenAI: alloy/echo/etc)
-            output_format: Output format ("mp3" or "wav")
+            voice: Voice role (alloy, echo, fable, onyx, nova, shimmer)
 
         Returns:
             Dict containing:
@@ -331,91 +262,25 @@ class NarratorAgent:
                 - audio_id: Unique audio identifier
                 - voice: Voice used
         """
-        ensure_dirs()
-
-        # Validate input
-        if not script or not script.strip():
-            raise ValueError("Script cannot be empty")
+        if not self.tts_config:
+            raise ValueError(
+                "TTS configuration not available. Please configure TTS_MODEL, TTS_API_KEY, and TTS_URL in .env"
+            )
 
         # Use default voice if not specified
         if voice is None:
             voice = self.default_voice
 
-        audio_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+        # Validate input parameters
+        if not script or not script.strip():
+            raise ValueError("Script cannot be empty")
 
-        # Generate audio using appropriate TTS
-        if self.use_cosyvoice:
-            return await self._generate_audio_cosyvoice(script, voice, audio_id, output_format)
-        else:
-            return await self._generate_audio_openai(script, voice, audio_id)
+        ensure_dirs()
 
-    async def _generate_audio_cosyvoice(
-        self,
-        script: str,
-        voice: str,
-        audio_id: str,
-        output_format: str
-    ) -> dict[str, Any]:
-        """Generate audio using CosyVoice"""
-        logger.info(f"Using CosyVoice TTS - Voice: {voice}")
-
-        try:
-            # Map voice name if needed
-            cosyvoice_voice = self.COSYVOICE_VOICES.get(voice, voice)
-
-            # Synthesize to WAV
-            audio_filename = f"narration_{audio_id}.wav"
-            wav_path = USER_DIR / audio_filename
-
-            result = self.cosyvoice.synthesize(
-                text=script,
-                speaker=cosyvoice_voice,
-                output_path=str(wav_path),
-                stream=False,
-            )
-
-            logger.info(f"CosyVoice audio saved: {result['audio_path']}")
-
-            # Convert to MP3 if requested
-            if output_format == "mp3":
-                audio_filename = f"narration_{audio_id}.mp3"
-                mp3_path = self.cosyvoice.convert_wav_to_mp3(str(wav_path))
-                audio_path = mp3_path
-            else:
-                audio_path = str(wav_path)
-
-            # Generate URL
-            relative_path = f"co-writer/audio/{audio_filename}"
-            audio_url = f"/api/outputs/{relative_path}"
-
-            return {
-                "audio_path": audio_path,
-                "audio_url": audio_url,
-                "audio_id": audio_id,
-                "voice": voice,
-                "tts_provider": "cosyvoice",
-                "duration": result.get("duration", 0),
-            }
-
-        except Exception as e:
-            logger.error(f"CosyVoice TTS generation failed: {e}", exc_info=True)
-            raise ValueError(f"CosyVoice TTS generation failed: {e}")
-
-    async def _generate_audio_openai(
-        self,
-        script: str,
-        voice: str,
-        audio_id: str
-    ) -> dict[str, Any]:
-        """Generate audio using OpenAI TTS (fallback)"""
-        if not self.tts_config:
-            raise ValueError("OpenAI TTS not configured")
-
-        logger.info(f"Using OpenAI TTS - Voice: {voice}")
-
-        # Truncate if too long
+        # Truncate overly long scripts (OpenAI TTS supports up to 4096 characters)
+        original_script_length = len(script)
         if len(script) > 4096:
-            logger.warning(f"Script length {len(script)} exceeds 4096 limit. Truncating...")
+            self.logger.warning(f"Script length {len(script)} exceeds 4096 limit. Truncating...")
             truncated = script[:4093]
             last_period = max(
                 truncated.rfind("。"),
@@ -429,40 +294,58 @@ class NarratorAgent:
                 script = truncated[: last_period + 1]
             else:
                 script = truncated + "..."
+            self.logger.info(
+                f"Script truncated from {original_script_length} to {len(script)} characters"
+            )
 
+        audio_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
         audio_filename = f"narration_{audio_id}.mp3"
         audio_path = USER_DIR / audio_filename
 
+        self.logger.info(f"Starting TTS audio generation - ID: {audio_id}, Voice: {voice}")
+
         try:
-            client = OpenAIClient(
-                base_url=self.tts_config["base_url"],
-                api_key=self.tts_config["api_key"]
+            binding = os.getenv("TTS_BINDING", "openai")
+            api_version = self.tts_config.get("api_version")
+
+            # Only use Azure client if binding is explicitly Azure,
+            # OR if binding is generic 'openai' but an Azure-specific api_version is present.
+            if binding == "azure_openai" or (binding == "openai" and api_version):
+                client = AsyncAzureOpenAI(
+                    api_key=self.tts_config["api_key"],
+                    azure_endpoint=self.tts_config["base_url"],
+                    api_version=api_version,
+                )
+            else:
+                # Create OpenAI client with custom base_url
+                client = AsyncOpenAI(
+                    base_url=self.tts_config["base_url"], api_key=self.tts_config["api_key"]
+                )
+
+            # Call OpenAI TTS API
+            response = await client.audio.speech.create(
+                model=self.tts_config["model"], voice=voice, input=script
             )
 
-            response = client.audio.speech.create(
-                model=self.tts_config["model"],
-                voice=voice,
-                input=script
-            )
+            # Save audio to file
+            await response.stream_to_file(audio_path)
 
-            response.stream_to_file(audio_path)
+            self.logger.info(f"Audio saved to: {audio_path}")
 
-            logger.info(f"OpenAI audio saved to: {audio_path}")
-
+            # Use correct path: co-writer/audio (matching the actual storage directory)
             relative_path = f"co-writer/audio/{audio_filename}"
-            audio_url = f"/api/outputs/{relative_path}"
+            audio_access_url = f"/api/outputs/{relative_path}"
 
             return {
                 "audio_path": str(audio_path),
-                "audio_url": audio_url,
+                "audio_url": audio_access_url,
                 "audio_id": audio_id,
                 "voice": voice,
-                "tts_provider": "openai",
             }
 
         except Exception as e:
-            logger.error(f"OpenAI TTS generation failed: {e}", exc_info=True)
-            raise ValueError(f"OpenAI TTS generation failed: {e}")
+            self.logger.error(f"TTS generation failed: {type(e).__name__}: {e}", exc_info=True)
+            raise ValueError(f"TTS generation failed: {type(e).__name__}: {e}")
 
     async def narrate(
         self,
@@ -470,7 +353,6 @@ class NarratorAgent:
         style: str = "friendly",
         voice: str = None,
         skip_audio: bool = False,
-        output_format: str = "mp3"
     ) -> dict[str, Any]:
         """
         Complete narration flow: generate script + generate audio
@@ -478,9 +360,8 @@ class NarratorAgent:
         Args:
             content: Note content
             style: Narration style
-            voice: Voice role
-            skip_audio: Whether to skip audio generation
-            output_format: Output format ("mp3" or "wav")
+            voice: Voice role (alloy, echo, fable, onyx, nova, shimmer)
+            skip_audio: Whether to skip audio generation (only return script)
 
         Returns:
             Dict containing script info and optionally audio info
@@ -488,13 +369,12 @@ class NarratorAgent:
         # Refresh TTS config before starting to avoid stale credentials
         try:
             self.tts_config = get_tts_config()
-            # Also refresh LLM config since narrate calls generate_script
-            self.llm_config = get_llm_config()
         except Exception as e:
-            logger.error(f"Failed to refresh configs: {e}")
+            self.logger.error(f"Failed to refresh TTS config: {e}")
 
         script_result = await self.generate_script(content, style)
 
+        # Use default voice if not specified
         if voice is None:
             voice = self.default_voice
 
@@ -504,30 +384,28 @@ class NarratorAgent:
             "style": style,
             "original_length": script_result["original_length"],
             "script_length": script_result["script_length"],
-            "tts_provider": "cosyvoice" if self.use_cosyvoice else "openai",
         }
 
-        if not skip_audio:
+        if not skip_audio and self.tts_config:
             try:
-                audio_result = await self.generate_audio(
-                    script_result["script"],
-                    voice=voice,
-                    output_format=output_format
+                audio_result = await self.generate_audio(script_result["script"], voice=voice)
+                result.update(
+                    {
+                        "audio_url": audio_result["audio_url"],
+                        "audio_path": audio_result["audio_path"],
+                        "audio_id": audio_result["audio_id"],
+                        "voice": voice,
+                        "has_audio": True,
+                    }
                 )
-                result.update({
-                    "audio_url": audio_result["audio_url"],
-                    "audio_path": audio_result["audio_path"],
-                    "audio_id": audio_result["audio_id"],
-                    "voice": voice,
-                    "has_audio": True,
-                    "duration": audio_result.get("duration", 0),
-                })
             except Exception as e:
-                logger.error(f"Audio generation failed: {e}")
+                self.logger.error(f"Audio generation failed: {e}")
                 result["has_audio"] = False
                 result["audio_error"] = str(e)
         else:
             result["has_audio"] = False
+            if not self.tts_config:
+                result["audio_error"] = "TTS not configured"
 
         return result
 

@@ -160,6 +160,10 @@ export const translations = {
     "From Knowledge Base": "From Knowledge Base",
     "From Web": "From Web",
     "New Chat": "New Chat",
+    "Save to Notebook": "Save to Notebook",
+    "Click to edit": "Click to edit",
+    "Expand sidebar": "Expand sidebar",
+    "Collapse sidebar": "Collapse sidebar",
 
     // History Page
     "Chat History": "Chat History",
@@ -614,6 +618,10 @@ export const translations = {
     "From Knowledge Base": "来自知识库",
     "From Web": "来自网络",
     "New Chat": "新对话",
+    "Save to Notebook": "保存到笔记本",
+    "Click to edit": "点击编辑",
+    "Expand sidebar": "展开侧边栏",
+    "Collapse sidebar": "收起侧边栏",
 
     // History Page
     "Chat History": "对话历史",
