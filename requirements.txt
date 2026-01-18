@@ -50,8 +50,8 @@ pydantic-core>=2.18.0,<3.0.0
 # RAG and knowledge base
 # ============================================
 lightrag-hku>=1.0.0
-# raganything>=0.1.0  # Optional: Multi-modal RAG (complex dependencies)
-# Install separately if needed: pip install raganything
+raganything>=0.1.0             # Multi-modal RAG (note: complex dependencies like gradio, mlx-vlm)
+docling>=2.31.0                # Document parser for Office/HTML (alternative to MinerU)
 
 # ============================================
 # LlamaIndex
