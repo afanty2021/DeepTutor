@@ -25,12 +25,12 @@ import "katex/dist/katex.min.css";
 import { Mermaid } from "@/components/Mermaid";
 import { useGlobal } from "@/context/GlobalContext";
 import { apiUrl, wsUrl } from "@/lib/api";
-import { getTranslation } from "@/lib/i18n";
 import AddToNotebookModal from "@/components/AddToNotebookModal";
 import { exportToPdf, preprocessMarkdownForPdf } from "@/lib/pdfExport";
 import { useResearchReducer } from "@/hooks/useResearchReducer";
 import { ResearchDashboard } from "@/components/research/ResearchDashboard";
 import { ResearchEvent } from "@/types/research";
+import { useTranslation } from "react-i18next";
 
 interface ChatMsg {
   id: string;
@@ -49,7 +49,7 @@ export default function ResearchPage() {
     setResearchState: setGlobalResearchState,
     uiSettings,
   } = useGlobal();
-  const t = (key: string) => getTranslation(uiSettings.language, key);
+  const { t } = useTranslation();
 
   // Local Reducer State for Deep Research Dashboard
   const [state, dispatch] = useResearchReducer();
@@ -95,6 +95,7 @@ export default function ResearchPage() {
         }
       })
       .catch((err) => console.error("Failed to fetch KBs:", err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only run on mount
   }, []);
 
   // Auto-scroll Chat
@@ -114,11 +115,13 @@ export default function ResearchPage() {
         {
           id: "welcome",
           role: "assistant",
-          content:
+          content: t(
             "Welcome to Deep Research Lab. \n\nPlease configure your settings above, then enter a research topic below.",
+          ),
         },
       ]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only run on mount to set initial greeting
   }, []);
 
   // Select latest active task automatically if none selected
@@ -232,7 +235,7 @@ export default function ResearchPage() {
       {
         id: "optimizing",
         role: "assistant",
-        content: "Optimizing topic...",
+        content: t("Optimizing topic..."),
         isOptimizing: true,
       },
     ]);
@@ -310,7 +313,7 @@ export default function ResearchPage() {
         scale: 2,
       });
     } catch (err) {
-      console.error("PDF Export failed", err);
+      console.error(t("PDF Export failed"), err);
     } finally {
       setIsExportingPdf(false);
     }
@@ -332,10 +335,10 @@ export default function ResearchPage() {
                 className={`w-2 h-2 rounded-full ${state.global.stage !== "idle" && state.global.stage !== "completed" ? "bg-emerald-500 animate-pulse" : "bg-slate-300 dark:bg-slate-600"}`}
               />
               {state.global.stage === "idle"
-                ? t("Idle")
+                ? "Idle"
                 : state.global.stage === "completed"
-                  ? t("Completed")
-                  : t("Running")}
+                  ? "Completed"
+                  : "Running"}
             </div>
           </div>
 
@@ -350,7 +353,9 @@ export default function ResearchPage() {
                 onChange={(e) => setSelectedKb(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20"
               >
-                {kbs.length === 0 && <option value="">Loading...</option>}
+                {kbs.length === 0 && (
+                  <option value="">{t("Loading...")}</option>
+                )}
                 {kbs.map((kb) => (
                   <option key={kb} value={kb}>
                     {kb}
@@ -362,7 +367,7 @@ export default function ResearchPage() {
             {/* Plan Mode */}
             <div>
               <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 block">
-                {t("Research Mode")}
+                {t("Plan Mode")}
               </label>
               <div className="flex bg-slate-50 dark:bg-slate-700 p-1 rounded-lg border border-slate-200 dark:border-slate-600">
                 {["quick", "medium", "deep", "auto"].map((mode) => (
@@ -375,7 +380,7 @@ export default function ResearchPage() {
                         : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                     }`}
                   >
-                    {t(mode.charAt(0).toUpperCase() + mode.slice(1))}
+                    {mode}
                   </button>
                 ))}
               </div>
@@ -503,7 +508,7 @@ export default function ResearchPage() {
                   state.global.stage !== "idle" &&
                   state.global.stage !== "completed"
                     ? t("Research in progress...")
-                    : t("Enter research topic...")
+                    : "Enter research topic..."
                 }
                 disabled={
                   state.global.stage !== "idle" &&

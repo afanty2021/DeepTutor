@@ -2,13 +2,10 @@
 
 import CoWriterEditor from "@/components/CoWriterEditor";
 import { Edit3 } from "lucide-react";
-import { useGlobal } from "@/context/GlobalContext";
-import { getTranslation } from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 
 export default function CoWriterPage() {
-  const { uiSettings } = useGlobal();
-  const t = (key: string) => getTranslation(uiSettings.language, key);
-
+  const { t } = useTranslation();
   return (
     <div className="h-screen animate-fade-in flex flex-col p-6">
       {/* Header */}
@@ -18,7 +15,7 @@ export default function CoWriterPage() {
           {t("Co-Writer")}
         </h1>
         <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-          {t("AI-powered collaborative writing")}
+          {t("Intelligent markdown editor with AI-powered writing assistance.")}
         </p>
       </div>
 
